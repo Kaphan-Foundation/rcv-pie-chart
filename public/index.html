@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RCV Pie Chart Web Component</title>
+  <link rel="stylesheet" href="./assets/slider.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+    #slider-container {
+      width: 90%;
+      max-width: 800px;
+      margin: 0 auto 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>RCV Pie Chart Demo</h1>
+
+  <!-- Timeline slider -->
+  <div id="slider-container">
+    <div id="round-slider"></div>
+  </div>
+
+  <!-- Pie chart web component -->
+  <script type="module" src="./pie-chart.es.js"></script>
+  <pie-chart id="pie" electionSummary='{"config":{"contest":"For County Sheriff (1/3)","date":"2019-03-06","generatedBy":"RCTab 1.3.999","jurisdiction":"","office":""},"jsonFormatVersion":"1","results":[{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":1,"tally":{"Beth Small":"2","John Wayne Jr.":"5","Sandra Williams":"3","Terry Baker":"5","Thomas Soto":"3","Tony Seiler":"5","Undeclared Write-ins":"2","Warren Norell":"4"},"tallyResults":[{"eliminated":"Undeclared Write-ins","transfers":{"John Wayne Jr.":"1","Tony Seiler":"1"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":2,"tally":{"Beth Small":"2","John Wayne Jr.":"6","Sandra Williams":"3","Terry Baker":"5","Thomas Soto":"3","Tony Seiler":"6","Warren Norell":"4"},"tallyResults":[{"eliminated":"Beth Small","transfers":{"Terry Baker":"2"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":3,"tally":{"John Wayne Jr.":"6","Sandra Williams":"3","Terry Baker":"7","Thomas Soto":"3","Tony Seiler":"6","Warren Norell":"4"},"tallyResults":[{"eliminated":"Thomas Soto","transfers":{"John Wayne Jr.":"1","Warren Norell":"2"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":4,"tally":{"John Wayne Jr.":"7","Sandra Williams":"3","Terry Baker":"7","Tony Seiler":"6","Warren Norell":"6"},"tallyResults":[{"eliminated":"Sandra Williams","transfers":{"Tony Seiler":"1","Warren Norell":"2"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":5,"tally":{"John Wayne Jr.":"7","Terry Baker":"7","Tony Seiler":"7","Warren Norell":"8"},"tallyResults":[{"eliminated":"John Wayne Jr.","transfers":{"Terry Baker":"3","Tony Seiler":"2","Warren Norell":"2"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"0","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":6,"tally":{"Terry Baker":"10","Tony Seiler":"9","Warren Norell":"10"},"tallyResults":[{"eliminated":"Tony Seiler","transfers":{"Terry Baker":"2","Warren Norell":"2","exhausted":"5"}}],"threshold":"15"},{"inactiveBallots":{"exhaustedChoices":"5","overvotes":"0","repeatedRankings":"0","skippedRankings":"0"},"round":7,"tally":{"Terry Baker":"12","Warren Norell":"12"},"tallyResults":[{"elected":"Warren Norell","transfers":{}}],"threshold":"13"}],"summary":{"finalThreshold":"13","numCandidates":8,"numWinners":1,"totalNumBallots":"35","undervotes":6}}'
+  >
+  </pie-chart>
+
+  <!-- Slider initialization -->
+  <script src="./assets/slider.js"></script>
+  <script>
+    // Parse the election data to generate timeline info
+    const electionData = JSON.parse(document.getElementById('pie').getAttribute('electionSummary'));
+    const numRounds = electionData.results.length;
+
+    // Generate tick text based on number of rounds
+    function generateTickText(n) {
+      return Array.from({length: n}, (_, i) =>
+        n < 10 ? 'Round ' + (i + 1) :
+        n < 20 ? 'R ' + (i + 1) :
+        String(i + 1)
+      );
+    }
+
+    // Generate timeline data from RCtab results (matches PieChartContainer logic)
+    function generateTimelineData(data) {
+      return data.results.map(function(round) {
+        const items = [];
+        round.tallyResults.forEach(function(result) {
+          if (result.elected) {
+            items.push({
+              summaryText: result.elected + ' won',
+              className: 'timeline-info-good',
+              moreInfoText: result.elected + ' exceeded the threshold of ' +
+                Number(round.threshold).toLocaleString() + ' votes and was elected.'
+            });
+            const transfers = Object.entries(result.transfers);
+            const totalTransferred = transfers.reduce(function(sum, entry) {
+              return sum + parseFloat(entry[1]);
+            }, 0);
+            if (totalTransferred > 0) {
+              items.push({
+                summaryText: result.elected + ' transferred ' +
+                  totalTransferred.toLocaleString() + ' surplus votes',
+                className: 'timeline-info'
+              });
+            }
+          } else if (result.eliminated) {
+            items.push({
+              summaryText: result.eliminated + ' eliminated',
+              className: 'timeline-info-bad',
+              moreInfoText: result.eliminated + ' had the fewest votes and was eliminated.'
+            });
+            const transfers = Object.entries(result.transfers);
+            const totalTransferred = transfers.reduce(function(sum, entry) {
+              return sum + parseFloat(entry[1]);
+            }, 0);
+            if (totalTransferred > 0) {
+              items.push({
+                summaryText: result.eliminated + ' transferred ' +
+                  totalTransferred.toLocaleString() + ' votes',
+                className: 'timeline-info'
+              });
+            }
+          }
+        });
+        return items;
+      });
+    }
+
+    // Wire slider value changes to the pie chart's currentRound
+    function sliderValueChanged(newValue) {
+      const pie = document.getElementById('pie');
+      if (pie) {
+        pie.currentRound = newValue + 1;  // slider is 0-based, rounds are 1-based
+      }
+    }
+
+    // Initialize the slider
+    trs_createSliderAndTimeline({
+      wrapperDivId: 'round-slider',
+      numTicks: numRounds,
+      width: '100%',
+      tickLabelPrefix: 'Round ',
+      hideTimelineInitially: false,
+      sliderValueChanged: sliderValueChanged,
+      tickText: generateTickText(numRounds),
+      color: 'orangered',
+      timelineData: generateTimelineData(electionData),
+      animateOnLoad: false,
+      timelinePeeking: true,
+      hideActiveTickText: true,
+      timeBetweenStepsMs: 100
+    });
+  </script>
+
+</body>
+</html>
