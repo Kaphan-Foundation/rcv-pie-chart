@@ -13,7 +13,7 @@ After building, open `dist/index.html` in a browser or run `npx vite preview` to
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/rcv-pie-chart.git
+git clone https://github.com/Kaphan-Foundation/rcv-pie-chart.git
 cd rcv-pie-chart
 npm install
 ```
