@@ -8,7 +8,14 @@ Built as a standalone `<pie-chart>` custom element that can be embedded in any w
 
 ![Pie chart showing RCV rounds](https://img.shields.io/badge/status-working-green)
 
-After building, open `dist/index.html` in a browser or run `npx vite preview` to see a 7-round County Sheriff election animated round by round.
+To see the full demo (pie chart + timeline slider) with a 7-round County Sheriff election:
+
+```bash
+npm run build
+npm run preview
+```
+
+This opens the demo at `http://localhost:4173`.
 
 ## Installation
 
@@ -29,10 +36,10 @@ This produces `dist/pie-chart.es.js` — a standalone ES module (~172KB, ~49KB g
 ## Development
 
 ```bash
-npm run dev
+npm run preview
 ```
 
-Starts a local dev server with hot reload at `http://localhost:4000`.
+Starts a local dev server with a demo with the timeline slider at http://localhost:4173.
 
 ## Usage
 
