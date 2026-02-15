@@ -38,19 +38,20 @@ let {
 
 
 interface PieData  {
-    label: string;
+    label: string;         // always the real candidate name
     value: number;
+    isTransfer?: boolean;  // true for the surplus-transfer portion of an elected candidate's slice
+    transferIndex?: number; // index into tallyResults, used for donut sub-slices
 };
 
 type PieDataArray = PieData[];
 
-/*
-// Create a pie generator
-const pie = d3.pie<PieData>()
-
-// Generate pie info
-const pieInfo:PieInfoArray = pie(data);
-*/
+// Unique key for D3 data binding — derived from structured fields, never parsed back
+function pieKey(d: PieData): string {
+    if (d.isTransfer) return `${d.label}__transfer`;
+    if (d.transferIndex != null) return `${d.label}__${d.transferIndex}`;
+    return d.label;
+}
 
 type PieInfoType = d3.PieArcDatum<PieData>;
 type PieInfoArray = PieInfoType[];
@@ -70,10 +71,8 @@ const pieChartCenterY = height/2;
 const pieChartID = 'Pie';
 const donutChartID = 'Donut';
 const textLayerID = 'TextLayer';
-const transferTag = '#transfer';
 const darkHashing = true;
 
-//const exhaustedColor = '#E0E0E0';
 const exhaustedColor = 'url(#cross-hatch)';
 
 const textArcRadius = 1.15;   // multiple of the pie chart radius where text labels go
@@ -85,9 +84,6 @@ const longTransition = 800;
 
 let pieInfoGlobal:PieInfoArray = [];
 let donutInfoGlobal:PieInfoArray = [];
-// let previousPieInfoGlobal;
-// let previousDonutInfoGlobal;
-
 let pieDataGlobal:PieDataArray = [];
 
 let originalTotalVotes:number = 0;
@@ -146,38 +142,12 @@ onMount(() => {
 });
 
 function initSummaryData(round: number):PieDataArray {
-  // console.log(jsonData.results);
-  // initGlobals();
   const pieData:PieDataArray = prepareRoundData(round);
   originalTotalVotes = getTotalVotes(round);
-  // console.log('pieData is: ', pieData);
   return pieData;
 }
 
-// Maybe don't need this if we force reload on every new display.  Keep temporarily.
-/*
-function initGlobals() {
-  pieInfoGlobal = [];
-  donutInfoGlobal =[];
-  pieDataGlobal = [];
-
-  originalTotalVotes = 0;
-
-  round = 1;
-  displayPhase = 0;
-
-  pieColors = {};
-  reportGlobal = [];
-  reportTitleGlobal = '';
-
-}
-  */
-
-
-
 function smallPieRadius():number {
-  //const scale = Math.sqrt(getTotalVotes(round)/originalTotalVotes);
-  //return Math.floor(scale * pieChartRadius);
   return pieChartRadius;
 }
 
@@ -195,7 +165,6 @@ export function countExhaustedVotes(round:number) {
 
       const transfers = tallyResults[i].transfers;
       if (transfers) {
-        //console.log('on round ', r, ' transfers ', transfers);
         const exhausted = transfers['exhausted'];
         if (exhausted)
           exhaustedVotes += Number(exhausted);
@@ -274,8 +243,6 @@ export function getElectedCandidates(round:number):string[] {
   let result:string[] = [];
   for (let r = 1; r <= round; r++)
     result = result.concat(chosenCandidates(r, 'elected'));
-
-  // console.log('elected candidates are: ', result);
   return result;
 }
 
@@ -297,9 +264,7 @@ function countElectedTransfers(candidate:string, round:number) {
   } else {
     return 0; // candidate was not elected
   }
-  // console.log('votes transferred from elected candidate ', candidate, votesTransferred);
   return votesTransferred;
-
 }
 
 
@@ -319,7 +284,7 @@ function prepareRoundData(round:number):PieDataArray {
     const newValue = Number(roundTally[newObj.label]);
     const electedTransfers = countElectedTransfers(newObj.label, round);
     if (electedTransfers > 0) {
-      resultData.push({label: newObj.label + transferTag, value: electedTransfers});
+      resultData.push({label: newObj.label, value: electedTransfers, isTransfer: true});
       newObj.value = newValue - electedTransfers;
       resultData.push(newObj)
     } else {
@@ -328,67 +293,12 @@ function prepareRoundData(round:number):PieDataArray {
     }
   }
 
-  //const exhaustedVotes = Number(jsonData.results[round-1].inactiveBallots.exhaustedChoices);
   const exhaustedVotes = countExhaustedVotes(round);
-  // console.log('prepareRoundData: exhausted votes --> ', exhaustedVotes);
-  // console.log('prepareRoundData: resultData --> ', resultData);
   resultData.push({ label: 'exhausted',
                  value: exhaustedVotes });
 
   return resultData;
 }
-
-/*
-function ZZZprepareRoundData(summaryResults:[], round:number) {
-
-  const roundTally = summaryResults[round-1].tally;
-  const resultData = [];
-  for (let [name, votes] of Object.entries(roundTally)) {
-    const newObj = {label: name, value: Number(votes)};
-    const electedTransfers = countElectedTransfers(name, round);
-    if (electedTransfers > 0) {
-      resultData.push({label: name + transferTag, value: electedTransfers});
-      newObj.value -= electedTransfers;
-    }
-    resultData.push(newObj);
-  }
-
-  //const exhaustedVotes = Number(jsonData.results[round-1].inactiveBallots.exhaustedChoices);
-  const exhaustedVotes = countExhaustedVotes(round);
-  // console.log('prepareRoundData: exhausted votes --> ', exhaustedVotes);
-  // console.log('prepareRoundData: resultData --> ', resultData);
-  resultData.push({ label: 'exhausted',
-                value: exhaustedVotes });
-
-  return resultData;
-}
-*/
-
-
-/*
-function XXXprepareRoundData(summaryResults:[], round:number) {
-
-  const roundTally = summaryResults[0].tally;
-  const newData = [];
-  for (let [name, votes] of Object.entries(roundTally)) {
-      newData.push({label: name,
-                    value: 0});
-  }
-
-  roundTally = summaryResults[round-1].tally;
-  for (let newObj of newData) {
-    newObj.value = Number(roundTally[newObj.label]);
-  }
-
-  //const exhaustedVotes = Number(jsonData.results[round-1].inactiveBallots.exhaustedChoices);
-  const exhaustedVotes = countExhaustedVotes(round);
-  console.log('prepareRoundData: exhausted votes --> ', exhaustedVotes);
-  newData.push({ label: 'exhausted',
-                    value: exhaustedVotes });
-
-  return newData;
-}
-*/
 
 function initPieChartColors() {
 
@@ -442,8 +352,6 @@ function deleteDonut():void {
 
 function animatePhase1(round:number, nextPhase:()=>void) {
 
-  // console.log('animate phase 1');
-
   const t = d3.transition('global').duration(longTransition);
 
   if (nextPhase) {
@@ -459,7 +367,6 @@ function animatePhase1(round:number, nextPhase:()=>void) {
 }
 
 function animatePhase2(round:number, nextPhase:() => void) {
-  // console.log('animate phase 2');
 
   const t = d3.transition('global').duration(longTransition);
 
@@ -470,7 +377,6 @@ function animatePhase2(round:number, nextPhase:() => void) {
 }
 
 function animatePhase3(round:number, nextPhase:()=>void) {
-  // console.log('animate phase 3');
 
   const t = d3.transition('global').duration(longTransition);
   if (nextPhase)
@@ -708,7 +614,6 @@ export function animateOnePhaseFn():void {
 
 function updatePie(round:number):void {
   pieDataGlobal = prepareRoundData(round);
-  // previousPieInfoGlobal = pieInfoGlobal;
   pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
 }
 
@@ -716,22 +621,16 @@ function updatePie(round:number):void {
 
 function shrinkDonut(innerRadius:number,outerRadius:number):void {
 
-  const updatedPie = d3.pie<PieData>()
-    .sort(null)                     // (a, b) => d3.descending(a.value, b.value))
-    .value(d => d.value);
-
-
   const chart = d3.select<SVGSVGElement | null, any>(svg)
                   .select('#'+donutChartID);
 
-  // This is the destination arc for the slices when we shrink
-  // them in from the current radius.
+  // Destination arc shrinks slices down to the inner edge of the pie.
+  // innerRadius-1 avoids a D3 arc degenerate path when inner === outer.
   const updatedArc = d3.arc<DefaultArcObject>()
     .outerRadius(innerRadius)
-    .innerRadius(innerRadius-1);  // blows up without the -1!!!
+    .innerRadius(innerRadius-1);
 
   const slices = chart.selectAll<SVGPathElement, DefaultArcObject>('.slice');
-     // .data(info, d => d.data.label);
 
   let slicesLeft = slices.size();
   function cleanUpAtEnd() {
@@ -739,13 +638,11 @@ function shrinkDonut(innerRadius:number,outerRadius:number):void {
     if (slicesLeft === 0) {
 
       removeFinishedText();
-      //deleteDonut();
     }
   }
 
   slices
     .select('path')
-      //.transition('shrink-donut')
       .transition('global')
       .duration(shortTransition)
       .attr('d', d => updatedArc(d))
@@ -755,10 +652,7 @@ function shrinkDonut(innerRadius:number,outerRadius:number):void {
 
 
 function displayDonut(round: number):void {
-  // const [donutData, startAngles, endAngles] = makeDonutData();
-
   const donutInfo = makeDonutInfo(round, pieInfoGlobal);
-  // previousDonutInfoGlobal = donutInfoGlobal;
   donutInfoGlobal = createPieChartWithInfo(round, donutChartID, donutInfo, pieChartCenterX, pieChartCenterY,
                                            smallPieRadius(), largePieRadius(), false, true);
 }
@@ -769,16 +663,13 @@ function displayDonut(round: number):void {
 function updateDonut(round: number):void {
 
   const newDonutInfo = updateDonutInfo(round, donutInfoGlobal, pieInfoGlobal);
-  //previousDonutInfoGlobal = donutInfoGlobal;
   donutInfoGlobal = updatePieChartWithInfo(round, donutChartID, newDonutInfo,
-                          /* previousDonutInfoGlobal, */
                           smallPieRadius(), largePieRadius(), false);
 }
 
 
 function pickColor(d:PieInfoType) {
-  const label:string = d.data.label;
-  return pieColors[label.split('#')[0]];
+  return pieColors[d.data.label];
 }
 
 type NameNumberMap = {
@@ -811,18 +702,15 @@ function getTransferVotes(round: number) {
         result[name] += Number(votes);
     }
   }
-  // console.log('Total transfers are: ', result);
   return result;
 }
 
-// the argument here is the pieInfo (internal form for D3) for the main pie
-// not for the donut...
+// Build donut slice info from the main pie's pieInfo and the round's transfer data.
+// The donut shows where eliminated/elected candidate votes are going.
 function makeDonutInfo(round:number, pieInfo:PieInfoArray):PieInfoArray {
 
-  // console.log(`makeDonutInfo: round = ${round}`);
-
   const donutInfo:PieInfoArray = [];
-  const totalVotes:number = originalTotalVotes; //getTotalVotes(round);
+  const totalVotes:number = originalTotalVotes;
   const tallyResults:RCtabTallyResults[] = jsonData.results[round-1].tallyResults;
   const elected:boolean = false;
 
@@ -843,9 +731,10 @@ function makeDonutInfo(round:number, pieInfo:PieInfoArray):PieInfoArray {
       continue;
     }
 
-    let transferFromData = pieInfo.find((obj:PieInfoType) => obj.data.label == transferFrom + transferTag);
+    // Look for the transfer slice first (elected candidate's surplus portion), fall back to main slice
+    let transferFromData = pieInfo.find((obj:PieInfoType) => obj.data.label == transferFrom && obj.data.isTransfer);
     if (transferFromData === undefined)
-      transferFromData = pieInfo.find((obj:PieInfoType) => obj.data.label == transferFrom);
+      transferFromData = pieInfo.find((obj:PieInfoType) => obj.data.label == transferFrom && !obj.data.isTransfer);
     let startAngle:number = 0;
     if (transferFromData)
       startAngle = transferFromData.startAngle;
@@ -880,7 +769,7 @@ function makeDonutInfo(round:number, pieInfo:PieInfoArray):PieInfoArray {
       startAngle = newObj.endAngle = (startAngle + sliceAngle);
       // modify startAngle for next slice.
       newObj.index = i;
-      newObj.data.label = `${newObj.data.label}#${i}`;
+      newObj.data.transferIndex = i;
 
       donutInfo.push(newObj);
     }
@@ -909,7 +798,7 @@ function getTransferStartAngles(transferVotes:NameNumberMap, totalVotes:number, 
 function updateDonutInfo(round: number, donutInfo:PieInfoArray, pieInfo:PieInfoArray) {
 
   const newDonutInfo = [];
-  const totalVotes = originalTotalVotes; // getTotalVotes(round);
+  const totalVotes = originalTotalVotes;
   const transferVotes = getTransferVotes(round);
   const transferStartAngles = getTransferStartAngles(transferVotes, totalVotes, pieInfo);
 
@@ -919,7 +808,7 @@ function updateDonutInfo(round: number, donutInfo:PieInfoArray, pieInfo:PieInfoA
     const sliceAngle = d.endAngle - d.startAngle;
 
     // now find where the corresponding slice in the main pie is.
-    const mainPieObj = pieInfo.find(obj => d.data.label.indexOf(obj.data.label)===0);
+    const mainPieObj = pieInfo.find(obj => d.data.label === obj.data.label && !obj.data.isTransfer);
 
     if (mainPieObj) {
       const sliceName = mainPieObj.data.label;
@@ -928,7 +817,7 @@ function updateDonutInfo(round: number, donutInfo:PieInfoArray, pieInfo:PieInfoA
       newObj.endAngle = newObj.startAngle + sliceAngle;
 
     } else {
-      if (d.data.label.indexOf('exhausted') === 0) {
+      if (d.data.label === 'exhausted') {
         newObj.startAngle = d.startAngle;
         newObj.endAngle = d.endAngle;
       } else {
@@ -951,7 +840,6 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
   const textLayer = g.append('g')
     .attr('id', textLayerID)
     .attr('transform', `translate(${x}, ${y})`);
-    //.attr('filter', 'url(#text-top-filter)');
 
   const textArc = d3.arc<PieOrArc>()
     .innerRadius(outerRadius * textArcRadius)
@@ -962,12 +850,12 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
     .enter()
     .each(function (d:PieInfoType) {
       if (!(d.endAngle - d.startAngle < minimumTextAngle ||
-            d.data.label.includes(transferTag))) {
+            d.data.isTransfer)) {
         d3.select<SVGGElement, PieInfoType>(this as SVGGElement)
           .append('g')
-          .attr('id', d => d.data.label)
-          .classed('eliminated', (d:PieInfoType) => eliminatedCandidates.includes(d.data.label.split('#')[0]) ||
-                                                                    d.data.label.includes(transferTag))
+          .attr('id', d => pieKey(d.data))
+          .classed('eliminated', (d:PieInfoType) => eliminatedCandidates.includes(d.data.label) ||
+                                                                    d.data.isTransfer === true)
           .each(function (d,i) {
             if (d.data.label==='exhausted') {
               d3.select(this as SVGGElement)
@@ -998,16 +886,15 @@ function moveTextLabels(round: number, pieInfo:PieInfoArray, outerRadius:number,
   const tspans = textLayer.selectAll<SVGTSpanElement, PieInfoType>('tspan');
 
   const textGroups = textLayer.selectAll<SVGGElement, PieInfoType>('g')
-    .data(pieInfo, d => d.data.label)
-    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label.split('#')[0]) ||
-                                              d.data.label.includes(transferTag));
+    .data(pieInfo, d => pieKey(d.data))
+    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label) ||
+                                              d.data.isTransfer === true);
   const textArc = d3.arc<PieOrArc>()
     .innerRadius(outerRadius * textArcRadius)
     .outerRadius(outerRadius * textArcRadius+1);
 
 
   tspans
-    //.transition('move-tspans')
     .transition('global')
     .duration(shortTransition)
     .attr('transform', d => `translate(${textArc.centroid(d)})`)
@@ -1015,7 +902,6 @@ function moveTextLabels(round: number, pieInfo:PieInfoArray, outerRadius:number,
 
   textGroups
     .select('text')
-    //.transition('move-text')
     .transition('global')
     .duration(shortTransition)
     .attr('transform', d => `translate(${textArc.centroid(d)})`)
@@ -1072,15 +958,7 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
   const eliminatedCandidates = getEliminatedCandidates(round);
   const electedCandidates = getElectedCandidates(round);
 
-/*
-  const g = d3.select<SVGSVGElement | null, any>(svg)
-    .attr('width', width)
-    .attr('height', height);
-*/
-
   const g = d3.select<SVGSVGElement|null, any>(svg)
-    // .attr('width', '100%')
-    // .attr('height', 'auto')
     .attr('viewBox', `0 0 ${width} ${height}`)
     .attr('preserveAspectRatio', 'xMidYMid meet')
     .classed('pie-chart-svg', true);
@@ -1096,16 +974,13 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
     .enter()
     .append('g')
     .attr('class', 'slice')
-    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label.split('#')[0]) ||
-                                          d.data.label.includes(transferTag))
-    .classed('elected', d => electedCandidates.includes(d.data.label.split('#')[0]) &&
-                                          !d.data.label.includes(transferTag))
-    .attr('id', d => d.data.label)
+    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label) ||
+                                          d.data.isTransfer === true)
+    .classed('elected', d => electedCandidates.includes(d.data.label) &&
+                                          !d.data.isTransfer)
+    .attr('id', d => pieKey(d.data))
     .on('mouseenter', (d,i) => handleMouseEnter(d,i))
     .on('mouseleave', (d,i) => handleMouseLeave(d,i));
-    //.on('click', (d,i) => handleMouseClick(d,i));
-
-  // outlineElected();
 
   const radialArc = d3.arc<PieOrArc>()
     .outerRadius(outerRadius)
@@ -1113,14 +988,14 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
 
   if (growChart) {
 
+    // innerRadius+1 avoids a D3 arc degenerate path when inner === outer
     const oldArc = d3.arc<PieOrArc>()
-      .outerRadius(innerRadius+1)  // blows up without the +1
+      .outerRadius(innerRadius+1)
       .innerRadius(innerRadius);
 
     slices
       .append('path')
         .attr('d', oldArc)
-        //.transition('grow-pie-chart')
         .transition('global')
         .duration(shortTransition)
         .attr('d', d => radialArc(d))
@@ -1167,8 +1042,6 @@ function grayOutEliminated(innerRadius:number,outerRadius:number) {
   const chart = g.select('#' + pieChartID);
   const slices = chart.selectAll<SVGGElement, PieInfoType>('.eliminated');
 
-//  removeEliminatedText();
-
   const solidArc = d3.arc<DefaultArcObject>()
     .innerRadius(innerRadius);
 
@@ -1178,36 +1051,31 @@ function grayOutEliminated(innerRadius:number,outerRadius:number) {
   slices
     .classed('finished', true)
     .select('path')
-      //.transition('hatch-out-eliminated')
       .transition('global')
       .duration(shortTransition)
-
       .attrTween('d', function(d) {
           const interpolateRadius = d3.interpolate(outerRadius, innerRadius);
-          // this._current = d;
 
           return function(t) {
             hatchedArc.innerRadius(interpolateRadius(t));
-            return hatchedArc(d);
+            return hatchedArc(d as unknown as DefaultArcObject)!;
           };
         })
-      .attr('fill', (d:PieInfoType) => `url(#${d.data.label.split('#')[0].replaceAll(' ','-')})`);
+      .attr('fill', (d:PieInfoType) => `url(#${d.data.label.replaceAll(' ','-')})`);
 
 
   slices
     .clone(true)
     .classed('finished', true)
     .select('path')
-      //.transition('shrink-eliminated')
       .transition('global')
       .duration(shortTransition)
       .attrTween('d', function(d) {
           const interpolateRadius = d3.interpolate(outerRadius, innerRadius);
-          // this._current = d;
 
           return function(t:number) {
             solidArc.outerRadius(interpolateRadius(t));
-            return solidArc(d);
+            return solidArc(d as unknown as DefaultArcObject)!;
           };
         })
       .attr('fill', d => pickColor(d));
@@ -1234,21 +1102,6 @@ function raiseText():void {
         .remove();
 }
 
-
-/*
-function getStartAngle(name, pieInfo) {
-    const d = pieInfo.find(obj => name.indexOf(obj.data.label)===0);
-    return d.startAngle;
-}
-
-
-function getEndAngle(name, pieInfo) {
-    const d = pieInfo.find(obj => name.indexOf(obj.data.label)===0);
-    return d.endAngle;
-}
-*/
-
-
 function updatePieChart(round: number, chartID:string, newData:PieDataArray,
                         innerRadius:number, outerRadius:number,
                         displayText:boolean) : PieInfoArray {
@@ -1256,18 +1109,15 @@ function updatePieChart(round: number, chartID:string, newData:PieDataArray,
   const updatedPie = d3.pie<PieData>()
     .sort(null)
     .value(d => d.value);
-  // const previousPieInfo = previousPieInfoGlobal;
   const pieInfo:PieInfoArray = updatedPie(newData);
 
   updatePieChartWithInfo(round, chartID, pieInfo,
-                          /* previousPieInfo, */
                           innerRadius, outerRadius, displayText);
 
   return pieInfo;
 }
 
 function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoArray,
-                                /* previousPieInfo, */
                                 innerRadius:number, outerRadius:number, displayText:boolean):PieInfoArray {
 
   const eliminatedCandidates = getEliminatedCandidates(round);
@@ -1291,7 +1141,7 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
       .attr('prevEnd', d => d.endAngle);
 
   const slices = chart.selectAll<SVGGElement, PieInfoType>('.slice')
-    .data(pieInfo, d => d.data.label);
+    .data(pieInfo, d => pieKey(d.data));
 
 
   // If there are slices coming in, they are because someone was elected and these
@@ -1300,9 +1150,8 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
     .enter()
     .append('g')
     .attr('class', 'slice')
-    .attr('id', d => d.data.label)
+    .attr('id', d => pieKey(d.data))
     .classed('eliminated',true)
-    //.on('click', (d,i) => handleMouseClick(d,i))
     .on('mouseenter', (d,i) => handleMouseEnter(d,i))
     .on('mouseleave', (d,i) => handleMouseLeave(d,i))
     .append('path')
@@ -1312,15 +1161,8 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
   // This section is for already existing slices and will not be run for the newly
   // entering slices.
   slices
-  /*
-    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label.split('#')[0]) ||
-                                          d.data.label.includes(transferTag))
-    .classed('elected', d => electedCandidates.includes(d.data.label.split('#')[0]) &&
-                                          !d.data.label.includes(transferTag))
-  */
-    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label.split('#')[0]))
-    .classed('elected', d => electedCandidates.includes(d.data.label.split('#')[0]))
-    //.on('click', (d,i) => handleMouseClick(d,i));
+    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label))
+    .classed('elected', d => electedCandidates.includes(d.data.label))
     .on('mouseenter', (d,i) => handleMouseEnter(d,i))
     .on('mouseleave', (d,i) => handleMouseLeave(d,i));
 
@@ -1337,29 +1179,20 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
     // Update existing slices
   slices
     .select<SVGPathElement>('path')
-      //.transition('rotate-slices')
       .transition('global')
       .duration(shortTransition)
-      //.attr('d', d => rotatorArc(d));
-
       .attrTween('d', function(d) {
-
-    /*
-        const interpolateStartAngle = d3.interpolate(getStartAngle(d.data.label, previousPieInfo), d.startAngle);
-        const interpolateEndAngle = d3.interpolate(getEndAngle(d.data.label, previousPieInfo), d.endAngle);
-    */
-        const prevStartAngle = Number(d3.select(this.parentNode).attr('prevStart'));
-        const prevEndAngle = Number(d3.select(this.parentNode).attr('prevEnd'));
+        const prevStartAngle = Number(d3.select(this.parentNode as Element).attr('prevStart'));
+        const prevEndAngle = Number(d3.select(this.parentNode as Element).attr('prevEnd'));
 
         const interpolateStartAngle = d3.interpolate(prevStartAngle, d.startAngle);
         const interpolateEndAngle = d3.interpolate(prevEndAngle, d.endAngle);
 
-        // this._current = d;
         return t => {
           rotatorArc
             .startAngle(interpolateStartAngle(t))
             .endAngle(interpolateEndAngle(t));
-          return rotatorArc(d);
+          return rotatorArc(d as unknown as DefaultArcObject)!;
         };
       })
       .on('end', raiseTextAtEnd);
@@ -1375,88 +1208,32 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
 function getExhaustedVotes() {
   let exhaustedVotes = 0;
   for (let d of donutInfoGlobal) {
-    if (d.data.label.indexOf('exhausted')===0){
-      // console.log('+ exhausted votes ', d);
+    if (d.data.label === 'exhausted'){
       exhaustedVotes += Number(d.data.value);
-      // console.log('this round exhausted votes ', exhaustedVotes);
     }
   }
   return exhaustedVotes;
 }
 
-
-
-   /*
-    // there were several instances of this.  Just saving for awhile
-    // in case I have to remember how to do it.
-    //
-
-    .on('mouseenter', function(d,i) {
-      d3.select(this)
-        .classed('hovered', true)
-        .style('stroke', 'darkblue')
-        .style('stroke-width', '2px');
-      handleMouseEnter(d,i);
-      })
-    .on('mouseleave', function() {
-      d3.select(this)
-        .classed('hovered', false)
-        .style('stroke', 'none');
-      handleMouseLeave();
-    });
-    */
-
-
 function handleMouseEnter(event:MouseEvent, d:any) {
-  mouseData = d.data.label.split('#')[0];
+  mouseData = d.data.label;
   mouseEventType = 'enter';
   mouseY = event.clientY;
-
 }
-
-/*
-  [reportGlobal, reportTitleGlobal] = popupReport(d);
-  if (popup) {
-    popup.style.top = event.clientY + 20 + 'px';
-    popup.style.opacity = String(tooltipOpacity);
-  }
-
-*/
-
 
 function handleMouseLeave(event:Event, d:any) {
-
-  mouseData = d.data.label.split('#')[0];
+  mouseData = d.data.label;
   mouseEventType = 'leave';
 }
-/*
-  if (popup)
-    popup.style.opacity = '0';;
-  reportGlobal = [];
-  reportTitleGlobal = '';
-*/
-
 
 function showExhaustedExplainer(event:MouseEvent,d:any) {
   mouseEventType = 'show-exhausted';
   mouseY = event.clientY;
 }
 
-/*
-  if (exhaustedExplainer) {
-    exhaustedExplainer.style.top = event.clientY + 20 + 'px';
-    exhaustedExplainer.style.opacity = String(tooltipOpacity);
-  }
-*/
-
-
 function hideExhaustedExplainer(event:Event,d:any) {
   mouseEventType = 'hide-exhausted';
 }
-/*
-  if (exhaustedExplainer)
-    exhaustedExplainer.style.opacity = '0';
-*/
 
 
 </script>
@@ -1475,13 +1252,7 @@ function hideExhaustedExplainer(event:Event,d:any) {
 
 @media (max-width: 768px) {
   .pie-chart-svg {
-    max-height: 50vh; /* Smaller maximum height on mobile */
-  }
-}
-
-@media (max-width: 768px) {
-  .pie-chart-svg {
-    max-height: 60vh; /* Increase from 50vh to use more screen space */
+    max-height: 60vh;
   }
 }
 
