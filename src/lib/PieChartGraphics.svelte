@@ -481,17 +481,90 @@ function animatePhase3(round:number, nextPhase:()=>void) {
 
 }
 
+// --- Action queue: user actions during animation are queued and replayed in order ---
+
+type QueuedAction =
+    | { type: 'round', round: number }
+    | { type: 'step' };
+
+let isAnimating: boolean = false;
+let actionQueue: QueuedAction[] = [];
+
 function stopAnimating() {
   outlineElected();
   isAnimating = false;
+  processNextAction();
 }
 
-let isAnimating: boolean = false;
+// After each animation completes, process the next queued user action.
+// Each action executes as if the user performed it when not animating.
+function processNextAction() {
+  if (actionQueue.length === 0) {
+    // Queue drained — reconcile with parent's currentRound if needed
+    if (previousRound !== currentRound) {
+      if (currentRound === previousRound + 1 && previousRound > 0
+          && currentRound <= jsonData.results.length) {
+        previousRound = currentRound;
+        doAnimateOneRound(currentRound);
+      } else if (currentRound >= 1 && currentRound <= jsonData.results.length) {
+        previousRound = currentRound;
+        displayPhase = 0;
+        makeNewPie(currentRound);
+      }
+    }
+    return;
+  }
+
+  const action = actionQueue.shift()!;
+  switch (action.type) {
+    case 'round': {
+      const targetRound = action.round;
+      if (targetRound === previousRound + 1 && previousRound > 0
+          && targetRound <= jsonData.results.length) {
+        // Adjacent: animate the transition
+        previousRound = targetRound;
+        doAnimateOneRound(targetRound);
+      } else if (targetRound !== previousRound
+                  && targetRound >= 1
+                  && targetRound <= jsonData.results.length) {
+        // Non-adjacent: jump directly, then continue processing
+        previousRound = targetRound;
+        displayPhase = 0;
+        makeNewPie(targetRound);
+        processNextAction();
+      } else {
+        // Same round or invalid — skip
+        processNextAction();
+      }
+      break;
+    }
+    case 'step':
+      animateOnePhaseFn();
+      break;
+  }
+}
+
+// Animate a single round transition (all 3 phases) without depending on currentRound.
+// Used by the queue processor and by animateOneRoundFn.
+function doAnimateOneRound(targetRound: number) {
+  if (targetRound <= 1 || targetRound > jsonData.results.length) {
+    processNextAction();
+    return;
+  }
+  isAnimating = true;
+  animationRound = targetRound;
+  displayPhase = 0;
+  animatePhase1(animationRound-1, () => {
+    animatePhase2(animationRound-1, () => {
+      animatePhase3(animationRound, stopAnimating);
+    });
+  });
+}
 
 // will be bound to prop 'runFullAnimation'
 export function runFullAnimationFn() {
   if (isAnimating) {
-    console.warn('busy animating');
+    // Already animating — ignore duplicate "Animate All" requests
     return;
   }
 
@@ -503,6 +576,11 @@ export function runFullAnimationFn() {
 function runAnimationCycle() {
   displayPhase = 0;   // if in the middle of "one small step" animation, reset to 0.
 
+  // If user performed actions during animation, stop auto-play and process them
+  if (actionQueue.length > 0) {
+    stopAnimating();
+    return;
+  }
 
   const nextPhase = animationRound < jsonData.results.length - 1 ?
       runAnimationCycle : stopAnimating;
@@ -528,12 +606,12 @@ let previousRound = 0;
 function goToNextRound():void {
 
   console.log(`previous round was ${previousRound}, currentRound is ${currentRound}`);
-  if (isAnimating) {
-    console.log('gotoNextRound: busy animating');
-    return;
-  }
   if (previousRound == currentRound)
     return;
+  if (isAnimating) {
+    actionQueue.push({ type: 'round', round: currentRound });
+    return;
+  }
   if (previousRound == currentRound-1 && previousRound > 0)
     animateOneRoundFn();
   else
@@ -546,7 +624,7 @@ function goToNextRound():void {
 function setRoundFn(round:number): void {
   console.log('setRoundFn called');
   if (isAnimating) {
-    console.warn('busy animating');
+    actionQueue.push({ type: 'round', round: round });
     return;
   }
 
@@ -560,11 +638,11 @@ function animateOneRoundFn() {
   console.log("animateOneRoundFn called");
 
   if (isAnimating) {
-    console.warn('busy animating');
+    actionQueue.push({ type: 'round', round: currentRound });
     return;
   }
   if (currentRound <= 1) {
-    console.warn(`animateOneRoundFn: can't anitmate to round ${currentRound}`);
+    console.warn(`animateOneRoundFn: can't animate to round ${currentRound}`);
     return;
   }
 
@@ -605,8 +683,10 @@ export function animateOnePhaseFn():void {
     return;
   }
 
-  if (isAnimating)
+  if (isAnimating) {
+    actionQueue.push({ type: 'step' });
     return;
+  }
 
   isAnimating = true;
   displayPhase = (displayPhase + 1) % 3;
