@@ -81,6 +81,12 @@ const minimumTextAngle = 0.1; // minimum number of radians of a text slice to di
 const shortTransition = 750;
 const longTransition = 800;
 
+// SVG pattern IDs derived from candidate names. Must sanitize all non-alphanumeric
+// characters — apostrophes, quotes, etc. break CSS url(#...) references.
+function hatchPatternId(name: string): string {
+  return 'hatch-' + name.replace(/[^a-zA-Z0-9]/g, '-');
+}
+
 
 let pieInfoGlobal:PieInfoArray = [];
 let donutInfoGlobal:PieInfoArray = [];
@@ -325,7 +331,7 @@ function initPieChartColors() {
     if (darkHashing) {
       const pattern = prototypePattern.clone(true);
       pattern
-        .attr('id', name.replaceAll(' ','-'))
+        .attr('id', hatchPatternId(name))
         .select('rect')
           .attr('fill', pieColors[name]);
       pattern
@@ -334,7 +340,7 @@ function initPieChartColors() {
 
     } else {
       prototypePattern.clone(true)
-        .attr('id', name.replaceAll(' ','-'))
+        .attr('id', hatchPatternId(name))
         .select('path')
           .attr('stroke', pieColors[name]);
     }
@@ -1061,7 +1067,7 @@ function grayOutEliminated(innerRadius:number,outerRadius:number) {
             return hatchedArc(d as unknown as DefaultArcObject)!;
           };
         })
-      .attr('fill', (d:PieInfoType) => `url(#${d.data.label.replaceAll(' ','-')})`);
+      .attr('fill', (d:PieInfoType) => `url(#${hatchPatternId(d.data.label)})`);
 
 
   slices
