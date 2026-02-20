@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RCV Pie Chart Web Component</title>
-  <link rel="stylesheet" href="./assets/slider.css">
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -18,10 +17,130 @@
       font-size: 1.4rem;
       margin-bottom: 0.5rem;
     }
-    #slider-container {
-      width: 90%;
-      max-width: 800px;
-      margin: 0 auto 1rem;
+
+    /* Round Player styles — matches rcvis round-player.css */
+    .round-player-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .round-player-wrapper {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 16px;
+      width: 100%;
+      max-width: 750px;
+    }
+
+    .round-player-select-wrapper {
+      position: relative;
+    }
+
+    .round-player-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      width: 100%;
+      background-color: #fff;
+      border: 2px solid #4747ff;
+      color: #002c59;
+      border-radius: 4px;
+      padding: 4px 8px;
+      padding-right: 32px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .round-player-select-wrapper::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 12px;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 6px solid #4747ff;
+      transform: translateY(-50%);
+      transition: transform 0.2s ease;
+    }
+
+    .round-player-select::-ms-expand {
+      display: none;
+    }
+
+    .round-player-play-btn {
+      background-color: #4747ff;
+      color: #fff;
+      padding: 2px 10px;
+      font-size: 1rem;
+      min-width: 160px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .round-player-play-btn:hover {
+      color: #fff;
+      background-color: #4747c2;
+    }
+
+    .round-player-nav {
+      display: flex;
+      align-items: center;
+      flex-direction: row;
+      color: #4747ff;
+      font-size: 1rem;
+      padding: 4px 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .round-player-nav.round-player-prev {
+      margin-right: 24px;
+      flex-direction: row-reverse;
+    }
+
+    .round-player-nav.round-player-next {
+      margin-left: 24px;
+    }
+
+    .round-player-nav-label {
+      display: none;
+    }
+
+    @media screen and (min-width: 750px) {
+      .round-player-nav {
+        width: 100px;
+      }
+      .round-player-nav.round-player-prev svg {
+        margin-right: 6px;
+      }
+      .round-player-nav.round-player-next svg {
+        margin-left: 6px;
+      }
+      .round-player-nav-label {
+        display: inline-block;
+      }
+    }
+
+    .round-player-nav svg {
+      scale: 50%;
+      width: 24px;
+    }
+
+    .round-player-nav.round-player-prev svg {
+      transform: rotate(180deg);
+    }
+
+    .round-player-hidden {
+      visibility: hidden;
     }
   </style>
 </head>
@@ -29,10 +148,8 @@
 
   <h1>RCV Pie Chart Demo</h1>
 
-  <!-- Timeline slider -->
-  <div id="slider-container">
-    <div id="round-slider"></div>
-  </div>
+  <!-- Round controller -->
+  <div id="pie-slider-container"></div>
 
   <!-- Pie chart web component -->
   <script type="module" src="./pie-chart.es.js"></script>
@@ -40,92 +157,200 @@
   >
   </pie-chart>
 
-  <!-- Slider initialization -->
-  <script src="./assets/slider.js"></script>
+  <!-- RoundPlayer — matches rcvis static/visualizer/round-player.js -->
   <script>
-    // Parse the election data to generate timeline info
-    const electionData = JSON.parse(document.getElementById('pie').getAttribute('electionSummary'));
-    const numRounds = electionData.results.length;
+    function RoundPlayer({
+      container,
+      onChange,
+      onPlay,
+      totalRounds,
+      timeBetweenStepsMs,
+    }) {
+      let isPlaying = false;
+      let currentStep = totalRounds - 1;
+      let stepTimeMs = timeBetweenStepsMs || 3000;
+      let timer = null;
+      const svgNS = "http://www.w3.org/2000/svg";
+      const MIN_ROUNDS_FOR_NAV = 3;
+      const ARROW_SVG_VIEWBOX = "0 0 24 28";
+      const ARROW_SVG_PATH =
+        "M21.981 16.5981C23.981 15.4434 23.981 12.5566 21.981 11.4019L3.22017 0.570383C2.01129 -0.127565 0.500193 0.744867 0.500193 2.14076C0.500193 2.81278 0.871843 3.42969 1.46593 3.7438L15.7356 11.2887C17.8878 12.4266 17.8597 15.5191 15.6872 16.6179L1.59932 23.7428C0.925186 24.0837 0.500193 24.7749 0.500193 25.5304C0.500193 27.0724 2.16952 28.0362 3.50498 27.2652L21.981 16.5981Z";
 
-    // Generate tick text based on number of rounds
-    function generateTickText(n) {
-      return Array.from({length: n}, (_, i) =>
-        n < 10 ? 'Round ' + (i + 1) :
-        n < 20 ? 'R ' + (i + 1) :
-        String(i + 1)
-      );
-    }
+      function createNavButton(isNext) {
+        const navBtn = document.createElement("button");
+        navBtn.classList.add(
+          "round-player-nav",
+          isNext ? "round-player-next" : "round-player-prev"
+        );
+        if (isNext || totalRounds < MIN_ROUNDS_FOR_NAV) {
+          navBtn.classList.add("round-player-hidden");
+        }
 
-    // Generate timeline data from RCtab results (matches PieChartContainer logic)
-    function generateTimelineData(data) {
-      return data.results.map(function(round) {
-        const items = [];
-        round.tallyResults.forEach(function(result) {
-          if (result.elected) {
-            items.push({
-              summaryText: result.elected + ' won',
-              className: 'timeline-info-good',
-              moreInfoText: result.elected + ' exceeded the threshold of ' +
-                Number(round.threshold).toLocaleString() + ' votes and was elected.'
-            });
-            const transfers = Object.entries(result.transfers);
-            const totalTransferred = transfers.reduce(function(sum, entry) {
-              return sum + parseFloat(entry[1]);
-            }, 0);
-            if (totalTransferred > 0) {
-              items.push({
-                summaryText: result.elected + ' transferred ' +
-                  totalTransferred.toLocaleString() + ' surplus votes',
-                className: 'timeline-info'
-              });
-            }
-          } else if (result.eliminated) {
-            items.push({
-              summaryText: result.eliminated + ' eliminated',
-              className: 'timeline-info-bad',
-              moreInfoText: result.eliminated + ' had the fewest votes and was eliminated.'
-            });
-            const transfers = Object.entries(result.transfers);
-            const totalTransferred = transfers.reduce(function(sum, entry) {
-              return sum + parseFloat(entry[1]);
-            }, 0);
-            if (totalTransferred > 0) {
-              items.push({
-                summaryText: result.eliminated + ' transferred ' +
-                  totalTransferred.toLocaleString() + ' votes',
-                className: 'timeline-info'
-              });
-            }
-          }
-        });
-        return items;
-      });
-    }
+        const labelEl = document.createElement("span");
+        labelEl.classList.add("round-player-nav-label");
+        labelEl.innerText = isNext ? "Next" : "Back";
+        navBtn.appendChild(labelEl);
 
-    // Wire slider value changes to the pie chart's currentRound
-    function sliderValueChanged(newValue) {
-      const pie = document.getElementById('pie');
-      if (pie) {
-        pie.currentRound = newValue + 1;  // slider is 0-based, rounds are 1-based
+        const navSvg = document.createElementNS(svgNS, "svg");
+        navSvg.setAttribute("viewBox", ARROW_SVG_VIEWBOX);
+        navSvg.setAttribute("aria-hidden", "true");
+
+        const navPath = document.createElementNS(svgNS, "path");
+        navPath.setAttribute("fill", "currentColor");
+        navPath.setAttribute("d", ARROW_SVG_PATH);
+        navSvg.appendChild(navPath);
+        navBtn.appendChild(navSvg);
+
+        navBtn.addEventListener("click", () =>
+          setStep(currentStep + (isNext ? 1 : -1))
+        );
+        return navBtn;
       }
+
+      function createDropdown() {
+        const selectWrapper = document.createElement("div");
+        selectWrapper.classList.add("round-player-select-wrapper");
+
+        const select = document.createElement("select");
+        select.classList.add("round-player-select");
+        for (let round = 0; round < totalRounds; ++round) {
+          const opt = document.createElement("option");
+          opt.value = round;
+          opt.innerText = `Round ${round + 1} of ${totalRounds}`;
+          if (round === totalRounds - 1) {
+            opt.selected = true;
+          }
+          select.appendChild(opt);
+        }
+
+        select.addEventListener("change", (e) => {
+          setStep(+e.target.value);
+        });
+
+        selectWrapper.appendChild(select);
+        return selectWrapper;
+      }
+
+      function createPlayButton() {
+        const playBtn = document.createElement("button");
+        playBtn.classList.add("round-player-play-btn");
+        playBtn.innerText = "Play Animation";
+        playBtn.addEventListener("click", () => {
+          isPlaying ? stop() : play();
+        });
+        return playBtn;
+      }
+
+      function init() {
+        const playerEl = document.createElement("div");
+        playerEl.classList.add("round-player-container");
+
+        const wrapperEl = document.createElement("div");
+        wrapperEl.classList.add("round-player-wrapper");
+        wrapperEl.appendChild(createNavButton(false));
+        wrapperEl.appendChild(createDropdown());
+        wrapperEl.appendChild(createNavButton(true));
+
+        playerEl.appendChild(wrapperEl);
+        playerEl.appendChild(createPlayButton());
+
+        container.appendChild(playerEl);
+      }
+
+      function changeStep(step) {
+        if (step >= totalRounds || step < 0) {
+          stop();
+          return;
+        }
+
+        currentStep = step;
+        container.querySelector(`select option[value="${step}"]`).selected = true;
+
+        if (totalRounds >= MIN_ROUNDS_FOR_NAV) {
+          container
+            .querySelector(".round-player-next")
+            .classList.toggle(
+              "round-player-hidden",
+              currentStep >= totalRounds - 1
+            );
+
+          container
+            .querySelector(".round-player-prev")
+            .classList.toggle("round-player-hidden", currentStep <= 0);
+        }
+
+        onChange(step);
+      }
+
+      function setStep(step) {
+        stop();
+        changeStep(step);
+      }
+
+      function nextStep() {
+        if (!isPlaying) return;
+
+        timer = window.setTimeout(() => {
+          changeStep(currentStep + 1);
+          nextStep();
+        }, stepTimeMs);
+      }
+
+      function play() {
+        if (onPlay) onPlay();
+        isPlaying = true;
+        container.querySelector(".round-player-play-btn").innerText = "Stop";
+        changeStep(0);
+        nextStep();
+      }
+
+      function stop() {
+        isPlaying = false;
+        window.clearTimeout(timer);
+        container.querySelector(".round-player-play-btn").innerText =
+          "Play Animation";
+      }
+
+      function playing() {
+        return isPlaying;
+      }
+
+      function setTimeBetweenStepsMs(timeBetweenStepsMs) {
+        stepTimeMs = timeBetweenStepsMs;
+      }
+
+      init();
+
+      return { play, stop, setStep, setTimeBetweenStepsMs, playing };
+    }
+  </script>
+
+  <!-- Round controller initialization -->
+  <script>
+    const pieChart = document.getElementById('pie');
+    const electionData = JSON.parse(pieChart.getAttribute('electionSummary'));
+    const totalRounds = electionData.results.length;
+
+    // Wire up requestRoundChange as a property (not attribute)
+    pieChart.requestRoundChange = updateRound;
+
+    const pieRoundPlayer = RoundPlayer({
+      container: document.getElementById('pie-slider-container'),
+      totalRounds: totalRounds,
+      onChange: updatePieChartRound,
+      timeBetweenStepsMs: 3000,
+    });
+
+    function updatePieChartRound(sliderIndex) {
+      pieChart.currentRound = sliderIndex + 1;
     }
 
-    // Initialize the slider
-    trs_createSliderAndTimeline({
-      wrapperDivId: 'round-slider',
-      numTicks: numRounds,
-      width: '100%',
-      tickLabelPrefix: 'Round ',
-      hideTimelineInitially: false,
-      sliderValueChanged: sliderValueChanged,
-      tickText: generateTickText(numRounds),
-      color: 'orangered',
-      timelineData: generateTimelineData(electionData),
-      animateOnLoad: false,
-      timelinePeeking: true,
-      hideActiveTickText: true,
-      timeBetweenStepsMs: 100
-    });
+    // When the pie chart animates it requests to be told the new currentRound
+    // rather than using 2-way binding. We also update the slider state.
+    function updateRound(roundNum) {
+      pieChart.currentRound = roundNum;
+      pieRoundPlayer.setStep(roundNum - 1);
+    }
   </script>
 
 </body>
