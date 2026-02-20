@@ -396,9 +396,11 @@ h3, h4 {
 
 
 <div class="animation-button-container">
+  <!-- Animate All button removed — RoundPlayer handles this now
   <button class="next-button" onclick={runFullAnimation}>
     Animate All
   </button>
+  -->
 
   <button class="next-button" onclick={animateOnePhase}>
     One Small Step
