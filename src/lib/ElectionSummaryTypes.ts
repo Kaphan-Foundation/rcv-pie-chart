@@ -1,12 +1,12 @@
 
 
 
-export type JSONValue =
-  string
-  | number
-  | boolean
-  | null
-  | JSONObject
+export type JSONValue = 
+  string 
+  | number 
+  | boolean 
+  | null 
+  | JSONObject 
   | JSONArray;
 
 export interface JSONObject {
@@ -28,6 +28,7 @@ export interface RCtabSummaryConfig {
   generatedBy ?: string,
   jurisdiction ?: string,
   office ?: string,
+  threshold ?: string,
 }
 
 export interface RCtabResults {
@@ -81,7 +82,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
 
   // Define allowed fields for each type
   const allowedRCtabSummaryFields = new Set(['config', 'jsonFormatVersion', 'results', 'summary']);
-  const allowedConfigFields = new Set(['contest', 'date', 'generatedBy', 'jurisdiction', 'office']);
+  const allowedConfigFields = new Set(['contest', 'date', 'generatedBy', 'jurisdiction', 'office', 'threshold']);
   const allowedResultsFields = new Set(['inactiveBallots', 'round', 'tally', 'tallyResults', 'threshold']);
   const allowedInactiveBallotsFields = new Set(['exhaustedChoices', 'overvotes', 'repeatedRankings', 'skippedRankings']);
   const allowedTallyResultsFields = new Set(['elected', 'eliminated', 'transfers']);
@@ -123,7 +124,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
     errors.push('Results are missing');
     return { valid: errors.length === 0, errors };
   }
-
+  
   if (!Array.isArray(data.results)) {
     errors.push('Results must be an array');
     return { valid: errors.length === 0, errors };
@@ -143,14 +144,14 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
   // Validate each round
   for (let i = 0; i < data.results.length; i++) {
     const round = data.results[i];
-
+    
     // Check for unexpected fields in results
     for (const field of Object.keys(round)) {
       if (!allowedResultsFields.has(field)) {
         errors.push(`Round ${i+1}: Unexpected field in results: "${field}"`);
       }
     }
-
+    
     // Check if round number exists and is sequential
     if (typeof round.round !== 'number') {
       errors.push(`Round ${i+1} is missing a round number`);
@@ -180,7 +181,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       errors.push(`Round ${previousRound} is missing a tally`);
       continue; // Skip further validation for this round
     }
-
+    
     if (typeof round.tally !== 'object' || Array.isArray(round.tally)) {
       errors.push(`Round ${previousRound}: tally must be an object`);
       continue;
@@ -193,13 +194,13 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
     } else {
       // Subsequent rounds should only have candidates from the original set
       const currentCandidates = new Set(Object.keys(round.tally));
-
+      
       // Check if any new candidates appeared
       const newCandidates = [...currentCandidates].filter(c => !allCandidates.has(c));
       if (newCandidates.length > 0) {
         errors.push(`Round ${previousRound} contains new candidates not present in earlier rounds: ${newCandidates.join(', ')}`);
       }
-
+      
       // Update remaining candidates
       remainingCandidates = currentCandidates;
     }
@@ -214,7 +215,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       errors.push(`Round ${previousRound} is missing tallyResults`);
       continue; // Skip further validation for this round
     }
-
+    
     if (!Array.isArray(round.tallyResults)) {
       errors.push(`Round ${previousRound}: tallyResults must be an array`);
       continue;
@@ -223,14 +224,14 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
     // Validate each tallyResult
     for (let j = 0; j < round.tallyResults.length; j++) {
       const tallyResult = round.tallyResults[j];
-
+      
       // Check for unexpected fields
       for (const field of Object.keys(tallyResult)) {
         if (!allowedTallyResultsFields.has(field)) {
           errors.push(`Round ${previousRound}, tallyResult ${j+1}: Unexpected field: "${field}"`);
         }
       }
-
+      
       // Check if it has elected OR eliminated but not both
       if (tallyResult.elected !== undefined && tallyResult.eliminated !== undefined) {
         errors.push(`Round ${previousRound}, tallyResult ${j+1}: has both elected and eliminated set`);
@@ -239,7 +240,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       }
 
       const candidateName = tallyResult.elected || tallyResult.eliminated;
-
+      
       // Check that the candidate being elected/eliminated is in the candidate list
       if (candidateName && !remainingCandidates.has(candidateName)) {
         errors.push(`Round ${previousRound}, tallyResult ${j+1}: references candidate "${candidateName}" who is not in the current candidate list`);
@@ -250,7 +251,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
         errors.push(`Round ${previousRound}, tallyResult ${j+1}: missing transfers`);
         continue;
       }
-
+      
       if (typeof tallyResult.transfers !== 'object' || Array.isArray(tallyResult.transfers)) {
         errors.push(`Round ${previousRound}, tallyResult ${j+1}: transfers must be an object`);
         continue;
@@ -268,7 +269,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       if (tallyResult.eliminated && candidateName) {
         // Get the number of votes the eliminated candidate had
         const candidateVotes = parseFloat(round.tally[candidateName] || '0');
-
+        
         // Calculate total transfers
         let transferTotal = 0;
         for (const transferAmount of Object.values(tallyResult.transfers)) {

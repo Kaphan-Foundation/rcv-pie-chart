@@ -1,4 +1,4 @@
-<!-- PieChart.svelte -->
+<!-- src/components/PieChart.svelte -->
 <svelte:options runes={true} customElement="pie-chart" />
 <script lang="ts">
 
@@ -10,7 +10,7 @@ import { validateRCtabSummary } from '$lib/ElectionSummaryTypes';
 
 const tooltipOpacity = 0.85;   // for when we display explanatory text at the mouse cursor.
 
-let { electionSummary,
+let { electionSummary, 
       currentRound = 1,
       requestRoundChange = ((r:number) => {}),
       candidateColors = [],
@@ -35,7 +35,7 @@ let mouseY = $state<number>(0);
 
 // Create a reactive variable that will always be an object
 let jsonData = $derived(ensureObject(electionSummary));
-
+  
   // Function to ensure we're working with an object,
   // otherwise rendering will happen before an input string
   // can be converted into an object, and try to reference
@@ -136,7 +136,7 @@ function popupReport(candidate: string, round: number): [string[], string] {
         const tallyObject = jsonData.results[round-1].tally;
         tallyVotes = tallyObject[candidate];
       }
-
+    
       report.push(`${candidateLabel} has ${tallyVotes} votes at round ${round}.`);
     }
 
@@ -170,10 +170,10 @@ function popupReport(candidate: string, round: number): [string[], string] {
         if (transferVotes) {
           report.push(`${transferVotes} ${verbPhrase(transferVotes, r < round)} transferred from ${transferFrom} on round ${r}.`);
         }
-      }
+      } 
     }
   }
-
+ 
   return [report, candidateLabel];
 }
 
@@ -187,7 +187,7 @@ function countElected(): number {
         electedCount++;
     }
   }
-  return electedCount;
+  return electedCount;  
 }
 
 function getCandidateListFromSummaryFile() {
@@ -203,7 +203,7 @@ function makeEliminatedCandidateArray(round: number) {
     const newEliminatedCandidateNames = getEliminatedCandidates(r-1);
     allEliminatedCandidateNames = [...allEliminatedCandidateNames, ...newEliminatedCandidateNames];
   }
-
+ 
   const result = allCandidateNames.map((c) => allEliminatedCandidateNames.some((cand) => cand === c));
   // console.log('Eliminate Candidate Vector = ', result);
   return result;
@@ -229,14 +229,14 @@ function getEliminatedCandidates(round:number): string[] {
 }
 
 function getElectedCandidates(round:number): string[] {
-  return pieChartGraphicsInstance?
+  return pieChartGraphicsInstance? 
         pieChartGraphicsInstance.getElectedCandidates(round)
         : [];
 
 }
 
 function countExhaustedVotes(round:number) : number {
-  return pieChartGraphicsInstance?
+  return pieChartGraphicsInstance? 
         pieChartGraphicsInstance.countExhaustedVotes(round)
         : 0;
 }
@@ -320,7 +320,7 @@ function pieColors() : ColorMap {
   margin-right: 40px; /* Add extra space on right */
   margin-top: -3vh;
 }
-
+ 
 
 .visualizations-container {
   display: flex;
@@ -352,7 +352,7 @@ function pieColors() : ColorMap {
   align-self: center;
   margin: 0 auto;
   margin-top: 30px;
-  margin-left: 40px;
+  margin-left: 40px; 
 }
 ***/
 
@@ -369,7 +369,7 @@ function pieColors() : ColorMap {
   .page-container {
     padding: 0 10px; /* Reduce padding on smaller screens */
   }
-
+  
   .visualizations-container {
     padding: 0; /* Remove padding on small screens */
   }
@@ -383,18 +383,18 @@ h3, h4 {
   .common-header {
     margin-bottom: 0.5rem;
   }
-
+  
   h3, h4 {
     margin: 0.3rem 0;
     font-size: 0.9rem;
   }
-
+  
 }
-
+ 
 
 </style>
 
-
+  
 <div class="animation-button-container">
   <!-- Animate All button removed — RoundPlayer handles this now
   <button class="next-button" onclick={runFullAnimation}>
@@ -408,7 +408,7 @@ h3, h4 {
 </div>
 <div class="common-header">  <!-- if I take out this div, the buttons above stop working! -->
 </div>
-
+  
   <div class="page-container">
     <div class="visualizations-container">
       <div class="pie-chart-container">
@@ -424,7 +424,7 @@ h3, h4 {
           />
       </div>
 
-    <!--
+    <!-- 
       <div class="bubble-visualization-container">
         <BubbleVisualization
           candidates={getCandidateListFromSummaryFile()}
@@ -449,7 +449,7 @@ h3, h4 {
 
           {/each}
         {/if}
-
+     
         {#if getElectedCandidates(currentRound).length > 0}
           Elected:
           {#each getElectedCandidates(currentRound) as elected, i}
@@ -463,7 +463,7 @@ h3, h4 {
   </div>
 
   <div class='tooltip' bind:this={popup}>
-    <h3>{reportTitleGlobal}</h3>
+    <h3>{reportTitleGlobal}</h3>          
     {#each reportGlobal as line}
       <span>{line}</span>
       <br>
@@ -474,4 +474,4 @@ h3, h4 {
     "{exhaustedLabel()}" means all the candidates ranked on <br>
     these ballots have already been eliminated.
   </div>
-
+  

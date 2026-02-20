@@ -335,14 +335,14 @@ function initPieChartColors() {
         .select('rect')
           .attr('fill', pieColors[name]);
       pattern
-        .select('path')
-          .attr('stroke', '#505050');
+        .selectAll('circle')
+          .attr('fill', '#383838');
 
     } else {
       prototypePattern.clone(true)
         .attr('id', hatchPatternId(name))
-        .select('path')
-          .attr('stroke', pieColors[name]);
+        .selectAll('circle')
+          .attr('fill', pieColors[name]);
     }
   }
   pieColors['exhausted'] = exhaustedColor;
@@ -514,7 +514,7 @@ $effect(() =>{
 
 let previousRound = 0;
 
-// called when RoundSelector changes selection
+// called when RoundPlayer changes selection
 function goToNextRound():void {
 
   console.log(`previous round was ${previousRound}, currentRound is ${currentRound}`);
@@ -1273,9 +1273,10 @@ function hideExhaustedExplainer(event:Event,d:any) {
       <feBlend mode='normal' in='SourceGraphic' in2='BackgroundImage' />
     </filter>
 
-    <pattern id='cross-hatch' width='10' height='10' patternUnits='userSpaceOnUse'>
-      <rect width='10' height='10' fill='transparent' />
-      <path d='M0,0 l10,10 M0,10 l10,-10' stroke='lightgray' stroke-width='2' />
+    <pattern id='cross-hatch' width='7' height='7' patternUnits='userSpaceOnUse'>
+      <rect width='7' height='7' fill='transparent' />
+      <circle cx='1.75' cy='1.75' r='1.5' fill='lightgray' />
+      <circle cx='5.25' cy='5.25' r='1.5' fill='lightgray' />
     </pattern>
 
   </defs>
