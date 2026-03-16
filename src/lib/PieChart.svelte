@@ -16,7 +16,7 @@ let { electionSummary,
       candidateColors = [],
       textForWinner = 'elected',
       excludeFinalWinnerAndEliminatedCandidate = false,
-      firstRoundDeterminesPercentages = true,
+      firstRoundDeterminesPercentages = false,
       showCaptions = false,
     } : {
       electionSummary : RCtabSummary|string,
@@ -240,7 +240,10 @@ interface PieChartGraphicsType {
   exhaustedLabel: string;
 }
 
+const phaseLabels = ['Eliminate', 'Transfer', 'Consolidate'] as const;
+
 let pieChartGraphicsInstance: PieChartGraphicsType;
+let displayPhase = $state(0);
 
 function isFinalRoundSuppressed(round: number): boolean {
   return excludeFinalWinnerAndEliminatedCandidate
@@ -338,6 +341,21 @@ function pieColors() : ColorMap {
   margin: 0.5rem;
 }
 
+.animation-button-container button {
+  background-color: #4747ff;
+  color: #fff;
+  padding: 1px 7px;
+  font-size: 0.67rem;
+  min-width: 107px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.animation-button-container button:hover {
+  background-color: #4747c2;
+}
+
 .pie-chart-container {
   /* width: 90%; */
   /* min-width: 800px; /* Larger minimum size */
@@ -432,7 +450,7 @@ h3, h4 {
   -->
 
   <button class="next-button" onclick={animateOnePhase}>
-    One Small Step
+    {phaseLabels[displayPhase]}
   </button>
 </div>
 <div class="common-header">  <!-- if I take out this div, the buttons above stop working! -->
@@ -450,6 +468,8 @@ h3, h4 {
             requestRoundChange={onRoundChange}
             candidateColors={candidateColors}
             excludeFinalWinnerAndEliminatedCandidate={excludeFinalWinnerAndEliminatedCandidate}
+            firstRoundDeterminesPercentages={firstRoundDeterminesPercentages}
+            bind:displayPhase={displayPhase}
           />
       </div>
 

@@ -26,6 +26,8 @@ let {
   requestRoundChange = ((r:number) => {}),
   candidateColors = [],
   excludeFinalWinnerAndEliminatedCandidate = false,
+  firstRoundDeterminesPercentages = false,
+  displayPhase = $bindable(0),
 } : {
   jsonData: RCtabSummary,
   currentRound: number,
@@ -35,6 +37,8 @@ let {
   requestRoundChange: ((r:number)=>void) | null,
   candidateColors: string[],
   excludeFinalWinnerAndEliminatedCandidate: boolean,
+  firstRoundDeterminesPercentages: boolean,
+  displayPhase: number,
 } = $props();
 
 
@@ -96,7 +100,7 @@ let pieDataGlobal:PieDataArray = [];
 
 let originalTotalVotes:number = 0;
 
-let displayPhase:number = $state(0);    // $state just to make it inspectable
+// displayPhase is now a $bindable prop (see props above)
 let animationRound:number = 0;
 
 export type ColorMap = Record<string,string>;
@@ -199,9 +203,14 @@ function candidateVotesStr(candidate:string, round:number):string {
   return votes.toLocaleString('en-US');
 }
 
-// returns a formatted string with the percentage of the vote for a candidate on a given round
+// returns a formatted string with the percentage of the vote for a candidate on a given round.
+// When firstRoundDeterminesPercentages is true, the denominator is the first round's total votes.
+// When false, the denominator is the current round's active votes.
 function candidatePercentage(candidate:string, round:number):string {
-  const fraction = candidateVotes(candidate,round)/originalTotalVotes;
+  const denominator = firstRoundDeterminesPercentages
+    ? originalTotalVotes
+    : getTotalVotes(round);
+  const fraction = candidateVotes(candidate,round)/denominator;
   const formattedNumber = fraction.toLocaleString('en-US', {
     style: 'percent',
     minimumFractionDigits: 1
@@ -885,8 +894,15 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
             .append('tspan')
               .attr('x', 0)
               .attr('dy', '1.2em')
-              .text(d => candidateVotesStr(d.data.label,round) + ' (' +
-                            candidatePercentage(d.data.label,round) + ')');
+              .text(d => {
+                const votes = candidateVotesStr(d.data.label, round);
+                // When using per-round percentages, exhausted votes would push
+                // the total over 100%, so show only the vote count.
+                if (!firstRoundDeterminesPercentages && d.data.label === 'exhausted') {
+                  return votes;
+                }
+                return votes + ' (' + candidatePercentage(d.data.label, round) + ')';
+              });
       }
     });
   }
