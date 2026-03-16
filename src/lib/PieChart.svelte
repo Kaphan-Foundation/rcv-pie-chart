@@ -10,17 +10,35 @@ import { validateRCtabSummary } from '$lib/ElectionSummaryTypes';
 
 const tooltipOpacity = 0.85;   // for when we display explanatory text at the mouse cursor.
 
-let { electionSummary, 
+let { electionSummary,
       currentRound = 1,
       requestRoundChange = ((r:number) => {}),
       candidateColors = [],
+      textForWinner = 'elected',
+      excludeFinalWinnerAndEliminatedCandidate = false,
+      firstRoundDeterminesPercentages = true,
+      showCaptions = false,
     } : {
       electionSummary : RCtabSummary|string,
       currentRound:number,
       requestRoundChange:(r:number) => void,
       candidateColors: string[],
+      textForWinner: string,
+      excludeFinalWinnerAndEliminatedCandidate: boolean,
+      firstRoundDeterminesPercentages: boolean,
+      showCaptions: boolean,
 
     } = $props();
+
+
+// Verb forms for textForWinner, matching rcvis textForWinnerUtils.py
+const winnerTextForms: Record<string, { caption: string, event: string, infinitive: string }> = {
+  'elected':  { caption: 'Elected',  event: 'was elected',              infinitive: 'to be elected' },
+  'won':      { caption: 'Won',      event: 'won',                      infinitive: 'to win' },
+  'advanced': { caption: 'Advanced', event: 'advanced to the general',   infinitive: 'to advance to the general' },
+  'leading':  { caption: 'Leading',  event: 'is in the lead',           infinitive: 'to take the lead' },
+};
+let winnerText = $derived(winnerTextForms[textForWinner] ?? winnerTextForms['elected']);
 
 
 let popup = $state<HTMLElement | null>(null);
@@ -51,7 +69,7 @@ function ensureObject(data:any) {
         return {}; // Return empty object as fallback
       }
     }
-    console.log('RCtabSummary object status: ', validateRCtabSummary(data));
+    // console.log('RCtabSummary object status: ', validateRCtabSummary(data));
     return data || {}; // Return the object or empty object if null/undefined
 }
 
@@ -59,7 +77,7 @@ function ensureObject(data:any) {
 // the next component above.
 function onRoundChange(round: number) {
   if (requestRoundChange) {
-    console.log('onRoundChange in PieChart: passing on request for round ', round);
+    // console.log('onRoundChange in PieChart: passing on request for round ', round);
     requestRoundChange(round);
   } else {
     console.warn('onRoundChange in PieChart: requestRoundChange is null');
@@ -74,7 +92,7 @@ function handleMouseEvent(): void {
     case 'enter':
       [reportGlobal, reportTitleGlobal] = popupReport(mouseData, currentRound);
       if (popup) {
-          popup.style.top = String(mouseY||0 + 20) + 'px';
+          popup.style.top = String((mouseY || 0) + 20) + 'px';
           popup.style.opacity = String(tooltipOpacity);
       }
       break;
@@ -86,7 +104,7 @@ function handleMouseEvent(): void {
       break;
     case 'show-exhausted':
       if (exhaustedExplainer) {
-        exhaustedExplainer.style.top = String(mouseY||0 + 20) + 'px';
+        exhaustedExplainer.style.top = String((mouseY || 0) + 20) + 'px';
         exhaustedExplainer.style.opacity = String(tooltipOpacity);
       }
       break;
@@ -141,24 +159,25 @@ function popupReport(candidate: string, round: number): [string[], string] {
     }
 
     const tallyResults = jsonData.results[r-1].tallyResults;
+    const suppressOutcome = isFinalRoundSuppressed(r);
     for (let i = 0; i < tallyResults.length; i++) {
       const transfers: RCtabTally = tallyResults[i].transfers;
       const eliminated: string = tallyResults[i].eliminated;
       const elected: string = tallyResults[i].elected;
 
-      if (eliminated) {
-        if (eliminated === candidate) {
-          report.push(`${candidateLabel} will be eliminated on round ${r}.`);
+      if (!suppressOutcome) {
+        if (eliminated) {
+          if (eliminated === candidate) {
+            report.push(`${candidateLabel} will be eliminated on round ${r}.`);
+          }
         } else {
-          // Nothing to do
-        }
-      } else {
-        // eliminated was undefined, so see if the candidate was elected.
-        if (candidate === elected) {
-          report.push(`${candidateLabel} was elected on round ${r}.`);
-          if (transfers) {
-            for (let [cand, votes] of Object.entries(transfers)) {
-              report.push(`${votes} ${verbPhrase(Number(votes), r < round)} transferred to ${cand} on round ${r}.`);
+          // eliminated was undefined, so see if the candidate was elected.
+          if (candidate === elected) {
+            report.push(`${candidateLabel} ${winnerText.event} on round ${r}.`);
+            if (transfers) {
+              for (let [cand, votes] of Object.entries(transfers)) {
+                report.push(`${votes} ${verbPhrase(Number(votes), r < round)} transferred to ${cand} on round ${r}.`);
+              }
             }
           }
         }
@@ -180,6 +199,7 @@ function popupReport(candidate: string, round: number): [string[], string] {
 function countElected(): number {
   let electedCount: number = 0;
   for (let r = 1; r <= jsonData.results.length; r++) {
+    if (isFinalRoundSuppressed(r)) continue;
     const tallyResults = jsonData.results[r-1].tallyResults;
     for (let i = 0; i < tallyResults.length; i++) {
       const elected = tallyResults[i].elected;
@@ -187,7 +207,7 @@ function countElected(): number {
         electedCount++;
     }
   }
-  return electedCount;  
+  return electedCount;
 }
 
 function getCandidateListFromSummaryFile() {
@@ -222,14 +242,22 @@ interface PieChartGraphicsType {
 
 let pieChartGraphicsInstance: PieChartGraphicsType;
 
+function isFinalRoundSuppressed(round: number): boolean {
+  return excludeFinalWinnerAndEliminatedCandidate
+      && jsonData.results
+      && round === jsonData.results.length;
+}
+
 function getEliminatedCandidates(round:number): string[] {
+  if (isFinalRoundSuppressed(round)) return [];
   return pieChartGraphicsInstance?
         pieChartGraphicsInstance.getEliminatedCandidates(round)
         : [];
 }
 
 function getElectedCandidates(round:number): string[] {
-  return pieChartGraphicsInstance? 
+  if (isFinalRoundSuppressed(round)) return [];
+  return pieChartGraphicsInstance?
         pieChartGraphicsInstance.getElectedCandidates(round)
         : [];
 
@@ -282,7 +310,7 @@ function pieColors() : ColorMap {
 }
 
 .tooltip {
-  position: absolute;
+  position: fixed;
   width: max-content;
   text-align: left;
   padding: .5rem;
@@ -296,6 +324,7 @@ function pieColors() : ColorMap {
   transform: translate(-50%);
   font-weight:normal;
   opacity: 0;
+  z-index: 100;
 }
 
 .tooltip h3 {
@@ -420,7 +449,7 @@ h3, h4 {
             bind:mouseY={mouseY}
             requestRoundChange={onRoundChange}
             candidateColors={candidateColors}
-
+            excludeFinalWinnerAndEliminatedCandidate={excludeFinalWinnerAndEliminatedCandidate}
           />
       </div>
 
@@ -437,7 +466,8 @@ h3, h4 {
 
     </div>
 
-    <h3>{jsonData.config.contest}, {countElected()} to be elected, Round {currentRound}.</h3>
+    {#if showCaptions}
+    <h3>{jsonData.config.contest}, {countElected()} {winnerText.infinitive}, Round {currentRound}.</h3>
       <h4>
         {#if getEliminatedCandidates(currentRound).length > 0}
           About to eliminate:
@@ -449,9 +479,9 @@ h3, h4 {
 
           {/each}
         {/if}
-     
+
         {#if getElectedCandidates(currentRound).length > 0}
-          Elected:
+          {winnerText.caption}:
           {#each getElectedCandidates(currentRound) as elected, i}
             <span style:color={pieColors()[elected]}>{elected}</span>
             {#if i < getElectedCandidates(currentRound).length - 1}
@@ -460,6 +490,7 @@ h3, h4 {
           {/each}
         {/if}
       </h4>
+    {/if}
   </div>
 
   <div class='tooltip' bind:this={popup}>

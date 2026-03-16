@@ -4,6 +4,10 @@ An animated Ranked Choice Voting (RCV) pie chart web component. Visualizes round
 
 Built as a standalone `<pie-chart>` custom element that can be embedded in any web page.
 
+## Custom element factory
+
+This repo is also a general-purpose template for building standalone web components from Svelte 5 source. The pattern — a Vite library build with `customElement: true` in the Svelte compiler options — can be applied to any Svelte component to produce a self-contained ES module that works in any HTML page, regardless of framework. To build a different custom element, follow the same structure: create a Svelte component with `<svelte:options customElement="your-element-name" />`, add a JS entry point that imports it, and configure the Vite `lib` build entry.
+
 ## Demo
 
 ![Pie chart showing RCV rounds](https://img.shields.io/badge/status-working-green)
@@ -50,6 +54,18 @@ Starts a local dev server with a demo with the timeline slider at http://localho
 <pie-chart electionSummary='{ ... RCtabSummary JSON ... }'></pie-chart>
 ```
 
+With optional attributes:
+
+```html
+<pie-chart
+  electionSummary='{ ... }'
+  currentRound="3"
+  showCaptions="true"
+  textForWinner="winner"
+  candidateColors='["#e41a1c", "#377eb8", "#4daf4a", "#984ea3"]'
+></pie-chart>
+```
+
 ### Input format
 
 The component accepts an `electionSummary` attribute containing an [RCtabSummary](https://www.rcvresources.org/) JSON object (as a string or object). This is the standard output format produced by [RCTab](https://github.com/BrightSpots/rcv) and compatible tabulators.
@@ -83,18 +99,20 @@ The JSON structure looks like:
 
 ### Attributes / Properties
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `electionSummary` | `RCtabSummary \| string` | Election results data (required) |
-| `currentRound` | `number` | Round to display (default: 1) |
-| `requestRoundChange` | `(round: number) => void` | Callback when the component requests a round change |
-| `candidateColors` | `string[]` | Custom color palette for candidates (uses d3.schemeCategory10 by default) |
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `electionSummary` | `RCtabSummary \| string` | (required) | Election results data |
+| `currentRound` | `number` | `1` | Round to display |
+| `requestRoundChange` | `(round: number) => void` | no-op | Callback when the component requests a round change (e.g. during animation) |
+| `candidateColors` | `string[]` | `[]` (uses d3.schemeCategory10) | Custom color palette for candidates |
+| `textForWinner` | `string` | `'elected'` | Word used in captions for winners (e.g. `'elected'`, `'winner'`, `'approved'`) |
+| `showCaptions` | `boolean` | `false` | Show narration text below the chart describing eliminations and elections per round |
+| `firstRoundDeterminesPercentages` | `boolean` | `true` | When true, pie slice sizes are based on first-round totals (so the pie stays stable). When false, slices resize each round based on current totals. |
+| `excludeFinalWinnerAndEliminatedCandidate` | `boolean` | `false` | When true, removes the final winner and last eliminated candidate from the display |
 
 ### Animation controls
 
-The component includes two built-in buttons:
-- **Animate All** — plays through all rounds automatically
-- **One Small Step** — advances one animation phase at a time (eliminate → transfer → consolidate)
+The component includes a built-in **One Small Step** button that advances one animation phase at a time (eliminate → transfer → consolidate). Full-round animation is intended to be driven by the host page via `currentRound` and `requestRoundChange`.
 
 ## Project structure
 

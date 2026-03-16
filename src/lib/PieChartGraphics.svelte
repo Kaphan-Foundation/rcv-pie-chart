@@ -25,6 +25,7 @@ let {
   mouseY = $bindable(),
   requestRoundChange = ((r:number) => {}),
   candidateColors = [],
+  excludeFinalWinnerAndEliminatedCandidate = false,
 } : {
   jsonData: RCtabSummary,
   currentRound: number,
@@ -33,6 +34,7 @@ let {
   mouseY: number,
   requestRoundChange: ((r:number)=>void) | null,
   candidateColors: string[],
+  excludeFinalWinnerAndEliminatedCandidate: boolean,
 } = $props();
 
 
@@ -103,8 +105,8 @@ export const pieColors:ColorMap = {};
 
 export const exhaustedLabel = 'No Further Rankings';
 
-$inspect("currentRound = ", currentRound);
-$inspect("DisplayPhase = ", displayPhase);
+// $inspect("currentRound = ", currentRound);
+// $inspect("DisplayPhase = ", displayPhase);
 
 // Variables bound in Svelte bind directives
 let svg = $state<SVGSVGElement|null>(null);
@@ -137,8 +139,8 @@ function makeNewPie(round: number) {
 
 onMount(() => {
 
-  console.log('PieChartGraphics component loaded and initialized');
-  console.log('jsonData is: ', jsonData);
+  // console.log('PieChartGraphics component loaded and initialized');
+  // console.log('jsonData is: ', jsonData);
 
   initPieChartColors();
   setTimeout(() => {
@@ -222,6 +224,12 @@ function getTotalVotes(round:number) {
 function chosenCandidates(round:number, key:'eliminated'|'elected'):string[] {
     if (!round || round < 1 || round > jsonData.results.length) {
       console.warn('In chsoenCandidates: round ${round} is out of range.');
+      return [];
+    }
+
+    // When excludeFinalWinnerAndEliminatedCandidate is set, suppress
+    // elected/eliminated status on the final round (incomplete results).
+    if (excludeFinalWinnerAndEliminatedCandidate && round === jsonData.results.length) {
       return [];
     }
 
@@ -517,7 +525,7 @@ let previousRound = 0;
 // called when RoundPlayer changes selection
 function goToNextRound():void {
 
-  console.log(`previous round was ${previousRound}, currentRound is ${currentRound}`);
+  // console.log(`previous round was ${previousRound}, currentRound is ${currentRound}`);
   if (previousRound == currentRound)
     return;
   if (isAnimating) {
@@ -534,7 +542,7 @@ function goToNextRound():void {
 
 // will be bound to prop 'setRound'
 function setRoundFn(round:number): void {
-  console.log('setRoundFn called');
+  // console.log('setRoundFn called');
   if (isAnimating) {
     actionQueue.push({ type: 'round', round: round });
     return;
@@ -547,7 +555,7 @@ function setRoundFn(round:number): void {
 
 // will be bound to prop 'animateOneRound'
 function animateOneRoundFn() {
-  console.log("animateOneRoundFn called");
+  // console.log("animateOneRoundFn called");
 
   if (isAnimating) {
     actionQueue.push({ type: 'round', round: currentRound });
@@ -586,7 +594,7 @@ function animateOneRoundFn() {
 // will be bound to prop 'animateOnePhase'
 export function animateOnePhaseFn():void {
 
-  console.log(`animateOnePhaseFn called, currentRound = ${currentRound}, displayPhase = ${displayPhase}`);
+  // console.log(`animateOnePhaseFn called, currentRound = ${currentRound}, displayPhase = ${displayPhase}`);
 
 
   if (currentRound > jsonData.results.length) {
