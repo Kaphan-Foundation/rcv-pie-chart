@@ -22,6 +22,7 @@ let {
   currentRound = 1,
   mouseEventType = $bindable(),
   mouseData = $bindable(),
+  mouseX = $bindable(),
   mouseY = $bindable(),
   requestRoundChange = ((r:number) => {}),
   candidateColors = [],
@@ -33,6 +34,7 @@ let {
   currentRound: number,
   mouseEventType: string,
   mouseData: string,
+  mouseX: number,
   mouseY: number,
   requestRoundChange: ((r:number)=>void) | null,
   candidateColors: string[],
@@ -1267,6 +1269,7 @@ function getExhaustedVotes() {
 function handleMouseEnter(event:MouseEvent, d:any) {
   mouseData = d.data.label;
   mouseEventType = 'enter';
+  mouseX = event.clientX;
   mouseY = event.clientY;
 }
 
@@ -1277,6 +1280,7 @@ function handleMouseLeave(event:Event, d:any) {
 
 function showExhaustedExplainer(event:MouseEvent,d:any) {
   mouseEventType = 'show-exhausted';
+  mouseX = event.clientX;
   mouseY = event.clientY;
 }
 

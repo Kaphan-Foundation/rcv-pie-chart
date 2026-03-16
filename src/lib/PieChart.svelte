@@ -2,7 +2,6 @@
 <svelte:options runes={true} customElement="pie-chart" />
 <script lang="ts">
 
-// import BubbleVisualization from '$components/BubbleVisualization.svelte';
 import PieChartGraphics from '$components/PieChartGraphics.svelte';
 
 import type { RCtabSummary, RCtabTally, RCtabTallyResults,RCtabResults, JSONValue } from '$lib/ElectionSummaryTypes';
@@ -48,6 +47,7 @@ let reportTitleGlobal = $state<string>("");
 let reportGlobal = $state<string[]>([]);
 let mouseEventType = $state<string>("");
 let mouseData = $state<string>("");
+let mouseX = $state<number>(0);
 let mouseY = $state<number>(0);
 
 
@@ -86,13 +86,46 @@ function onRoundChange(round: number) {
 
 const allCandidateNames = $derived(getCandidateListFromSummaryFile());
 
+// Position a tooltip near the mouse cursor, clamped to the viewport.
+function positionTooltip(el: HTMLElement, x: number, y: number): void {
+  const margin = 12; // min distance from viewport edge
+  const offsetY = 20; // below the cursor
+
+  // Set position first so we can measure the rendered size
+  el.style.left = x + 'px';
+  el.style.top = (y + offsetY) + 'px';
+  el.style.transform = 'none';
+
+  // Clamp to viewport after rendering
+  requestAnimationFrame(() => {
+    const rect = el.getBoundingClientRect();
+    let left = x;
+    let top = y + offsetY;
+
+    // Keep right edge on screen
+    if (left + rect.width > window.innerWidth - margin) {
+      left = window.innerWidth - rect.width - margin;
+    }
+    // Keep left edge on screen
+    if (left < margin) {
+      left = margin;
+    }
+    // If tooltip would go below viewport, show it above the cursor
+    if (top + rect.height > window.innerHeight - margin) {
+      top = y - rect.height - margin;
+    }
+
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  });
+}
+
 function handleMouseEvent(): void {
-  // console.log('mouse event ', mouseEventType, mouseData, mouseY);
   switch(mouseEventType) {
     case 'enter':
       [reportGlobal, reportTitleGlobal] = popupReport(mouseData, currentRound);
       if (popup) {
-          popup.style.top = String((mouseY || 0) + 20) + 'px';
+          positionTooltip(popup, mouseX || 0, mouseY || 0);
           popup.style.opacity = String(tooltipOpacity);
       }
       break;
@@ -104,7 +137,7 @@ function handleMouseEvent(): void {
       break;
     case 'show-exhausted':
       if (exhaustedExplainer) {
-        exhaustedExplainer.style.top = String((mouseY || 0) + 20) + 'px';
+        positionTooltip(exhaustedExplainer, mouseX || 0, mouseY || 0);
         exhaustedExplainer.style.opacity = String(tooltipOpacity);
       }
       break;
@@ -315,6 +348,7 @@ function pieColors() : ColorMap {
 .tooltip {
   position: fixed;
   width: max-content;
+  max-width: calc(100vw - 24px);
   text-align: left;
   padding: .5rem;
   background: #FFFFFF;
@@ -323,9 +357,7 @@ function pieColors() : ColorMap {
   border-radius: 8px;
   pointer-events: none;
   font-size: 0.8rem;
-  left: 50%;
-  transform: translate(-50%);
-  font-weight:normal;
+  font-weight: normal;
   opacity: 0;
   z-index: 100;
 }
@@ -357,14 +389,10 @@ function pieColors() : ColorMap {
 }
 
 .pie-chart-container {
-  /* width: 90%; */
-  /* min-width: 800px; /* Larger minimum size */
-  width: 100%; /* Change from 90% to 100% */
-  min-width: auto; /* Remove the 800px minimum */
-
-  flex-grow: 0; /* Don't grow beyond specified width */
+  width: 100%;
+  min-width: auto;
+  flex-grow: 0;
   margin: 0 auto;
-  margin-right: 40px; /* Add extra space on right */
   margin-top: -3vh;
 }
  
@@ -374,35 +402,8 @@ function pieColors() : ColorMap {
   justify-content: space-between;
   width: 100%;
   padding: 0 20px;
-  /* gap: 80px; */
-  gap: 20px; /* Reduce from 80px */
+  gap: 20px;
 }
-
-
-/***  It looks like it is always OK to use justify-content: space-between even with no bubble viz display
-
-.visualizations-container {
-  justify-content: space-between;
-}
-  ***/
-
-
-
-/*  width: 25%; /* Smaller percentage */
-/*  flex-grow: 0; /* Don't grow beyond specified width */
-/*  margin-left: 40px; /* Add extra space on left */
-
-/***  Omit this if we are not using the bubble-visualization
-.bubble-visualization-container {
-  width: 25%;
-  flex-grow: 0;
-  align-self: center;
-  margin: 0 auto;
-  margin-top: 30px;
-  margin-left: 40px; 
-}
-***/
-
 
 /* Media query for smaller screens */
 @media (max-width: 1300px) {
@@ -464,6 +465,7 @@ h3, h4 {
             currentRound={currentRound}
             bind:mouseEventType={mouseEventType}
             bind:mouseData={mouseData}
+            bind:mouseX={mouseX}
             bind:mouseY={mouseY}
             requestRoundChange={onRoundChange}
             candidateColors={candidateColors}
@@ -472,17 +474,6 @@ h3, h4 {
             bind:displayPhase={displayPhase}
           />
       </div>
-
-    <!-- 
-      <div class="bubble-visualization-container">
-        <BubbleVisualization
-          candidates={getCandidateListFromSummaryFile()}
-          maxRanks={Math.min(10,getCandidateListFromSummaryFile().length)}
-          eliminatedCandidates={makeEliminatedCandidateArray(currentRound)}
-          currentRound={currentRound}
-        />
-      </div>
-    -->
 
     </div>
 
