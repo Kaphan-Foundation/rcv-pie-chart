@@ -209,7 +209,7 @@ function candidateVotesStr(candidate:string, round:number):string {
 function candidatePercentage(candidate:string, round:number):string {
   const denominator = firstRoundDeterminesPercentages
     ? originalTotalVotes
-    : getTotalVotes(round);
+    : getActiveVotes(round);
   const fraction = candidateVotes(candidate,round)/denominator;
   const formattedNumber = fraction.toLocaleString('en-US', {
     style: 'percent',
@@ -225,6 +225,25 @@ function getTotalVotes(round:number) {
     totalVotes += Number(votes);
   }
   return totalVotes;
+}
+
+// RCTab puts exhausted votes in the tally as a pseudo-candidate named
+// 'Inactive Ballots'. Our own tabulator uses 'exhausted'.
+function isExhaustedLabel(name:string):boolean {
+  return name === 'exhausted' || name === 'Inactive Ballots';
+}
+
+// Active votes only — excludes exhausted/inactive ballots from the total.
+// Used as the denominator when firstRoundDeterminesPercentages is false.
+function getActiveVotes(round:number) {
+  const tally = jsonData.results[round-1].tally;
+  let activeVotes:number = 0;
+  for (let [name, votes] of Object.entries(tally)) {
+    if (!isExhaustedLabel(name)) {
+      activeVotes += Number(votes);
+    }
+  }
+  return activeVotes;
 }
 
 // makes a list of either eliminated or elected candidates on a given round
@@ -898,7 +917,7 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
                 const votes = candidateVotesStr(d.data.label, round);
                 // When using per-round percentages, exhausted votes would push
                 // the total over 100%, so show only the vote count.
-                if (!firstRoundDeterminesPercentages && d.data.label === 'exhausted') {
+                if (!firstRoundDeterminesPercentages && isExhaustedLabel(d.data.label)) {
                   return votes;
                 }
                 return votes + ' (' + candidatePercentage(d.data.label, round) + ')';
