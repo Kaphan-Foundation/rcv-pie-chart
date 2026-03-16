@@ -107,7 +107,7 @@ The JSON structure looks like:
 | `candidateColors` | `string[]` | `[]` (uses d3.schemeCategory10) | Custom color palette for candidates |
 | `textForWinner` | `string` | `'elected'` | Word used in captions for winners (e.g. `'elected'`, `'winner'`, `'approved'`) |
 | `showCaptions` | `boolean` | `false` | Show narration text below the chart describing eliminations and elections per round |
-| `firstRoundDeterminesPercentages` | `boolean` | `true` | When true, pie slice sizes are based on first-round totals (so the pie stays stable). When false, slices resize each round based on current totals. |
+| `firstRoundDeterminesPercentages` | `boolean` | `true` | When true, percentages use first-round active votes as the denominator (so the total stays at 100% even as votes are exhausted). When false, the denominator is the current round's active votes, which decrease as candidates are eliminated. |
 | `excludeFinalWinnerAndEliminatedCandidate` | `boolean` | `false` | When true, removes the final winner and last eliminated candidate from the display |
 
 ### Animation controls
