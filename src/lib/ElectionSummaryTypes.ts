@@ -36,7 +36,7 @@ export interface RCtabResults {
   round : number,
   tally : RCtabTally,
   tallyResults : RCtabTallyResults[],
-  threshold : string
+  threshold ?: string
 }
 
 export interface RCtabInactiveBallots {
@@ -57,7 +57,7 @@ export interface RCtabTallyResults {
 }
 
 export interface RCtabSummarySummary  {
-    finalThreshold : string,
+    finalThreshold ?: string,
     numCandidates : number,
     numWinners : number,
     totalNumBallots : string,
@@ -84,7 +84,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
   const allowedRCtabSummaryFields = new Set(['config', 'jsonFormatVersion', 'results', 'summary']);
   const allowedConfigFields = new Set(['contest', 'date', 'generatedBy', 'jurisdiction', 'office', 'threshold']);
   const allowedResultsFields = new Set(['inactiveBallots', 'round', 'tally', 'tallyResults', 'threshold']);
-  const allowedInactiveBallotsFields = new Set(['exhaustedChoices', 'overvotes', 'repeatedRankings', 'skippedRankings']);
+  const allowedInactiveBallotsFields = new Set(['exhaustedChoices', 'overvotes', 'repeatedRankings', 'skippedRankings', 'finalRoundSurplus']);
   const allowedTallyResultsFields = new Set(['elected', 'eliminated', 'transfers']);
   const allowedSummaryFields = new Set(['finalThreshold', 'numCandidates', 'numWinners', 'totalNumBallots', 'undervotes']);
 
@@ -205,10 +205,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       remainingCandidates = currentCandidates;
     }
 
-    // Check if threshold exists
-    if (!round.threshold) {
-      errors.push(`Round ${previousRound}: threshold is missing`);
-    }
+    // Threshold is optional (absent in bottoms-up elections)
 
     // Check if tallyResults exists and is an array
     if (!round.tallyResults) {

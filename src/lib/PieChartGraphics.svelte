@@ -77,6 +77,7 @@ const pieChartCenterX = width/2;
 const pieChartCenterY = height/2;
 
 const pieChartID = 'Pie';
+const pieOutlineID = 'PieOutline';
 const donutChartID = 'Donut';
 const textLayerID = 'TextLayer';
 const darkHashing = true;
@@ -88,6 +89,14 @@ const minimumTextAngle = 0.1; // minimum number of radians of a text slice to di
 
 const shortTransition = 750;
 const longTransition = 800;
+
+// Slice separator: thin gap between adjacent pie slices
+const sliceSeparatorColor = 'white';
+const sliceSeparatorWidth = 1;
+
+// Elected candidate outline: rendered via the shadow outline pie
+const electedOutlineColor = '#ff00ff';
+const electedOutlineWidth = 3;
 
 // SVG pattern IDs derived from candidate names. Must sanitize all non-alphanumeric
 // characters — apostrophes, quotes, etc. break CSS url(#...) references.
@@ -122,6 +131,8 @@ function cleanUpOldPie() {
   const g = d3.select<SVGSVGElement | null, any>(svg)
   g.select('#' + pieChartID)
     .remove();
+  g.select('#' + pieOutlineID)
+    .remove();
   g.select('#' + donutChartID)
     .remove();
   g.select('#' + textLayerID)
@@ -141,6 +152,9 @@ function makeNewPie(round: number) {
   pieDataGlobal = initSummaryData(round);
   pieInfoGlobal = createPieChart(round, pieChartID, pieDataGlobal, pieChartCenterX, pieChartCenterY,
                                   0, smallPieRadius());
+  // Shadow outline pie — same geometry, invisible until elected
+  createPieChart(round, pieOutlineID, pieDataGlobal, pieChartCenterX, pieChartCenterY,
+                  0, smallPieRadius(), false, false, true);
 }
 
 onMount(() => {
@@ -659,6 +673,8 @@ export function animateOnePhaseFn():void {
 function updatePie(round:number):void {
   pieDataGlobal = prepareRoundData(round);
   pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
+  // Update shadow outline pie in sync
+  updatePieChart(round, pieOutlineID, pieDataGlobal, 0, smallPieRadius(), false, true);
 }
 
 
@@ -680,7 +696,6 @@ function shrinkDonut(innerRadius:number,outerRadius:number):void {
   function cleanUpAtEnd() {
     slicesLeft--;
     if (slicesLeft === 0) {
-
       removeFinishedText();
     }
   }
@@ -699,6 +714,12 @@ function displayDonut(round: number):void {
   const donutInfo = makeDonutInfo(round, pieInfoGlobal);
   donutInfoGlobal = createPieChartWithInfo(round, donutChartID, donutInfo, pieChartCenterX, pieChartCenterY,
                                            smallPieRadius(), largePieRadius(), false, true);
+
+  // Raise pie and outline groups so they render after (on top of) the donut group.
+  // Order: donut, pie, outline — so outline strokes are on top of everything.
+  const svgEl = d3.select<SVGSVGElement | null, any>(svg);
+  svgEl.select('#' + pieChartID).raise();
+  svgEl.select('#' + pieOutlineID).raise();
 }
 
 
@@ -979,7 +1000,8 @@ function moveTextLabels(round: number, pieInfo:PieInfoArray, outerRadius:number,
 
 function createPieChart(round: number, chartID:string, data:PieDataArray,
                         x:number, y:number, innerRadius:number, outerRadius:number,
-                        displayText:boolean = true, growChart:boolean = false):PieInfoArray {
+                        displayText:boolean = true, growChart:boolean = false,
+                        outlineOnly:boolean = false):PieInfoArray {
 
   const pie = d3.pie<PieData>()
     .sort(null)
@@ -988,23 +1010,26 @@ function createPieChart(round: number, chartID:string, data:PieDataArray,
 
   createPieChartWithInfo(round, chartID, pieInfo,
                           x, y, innerRadius, outerRadius,
-                          displayText, growChart);
+                          displayText, growChart, outlineOnly);
   return pieInfo;
 
 }
 
 function outlineElected() {
   const g = d3.select<SVGSVGElement | null, any>(svg);
-  const chart = g.select('#' + pieChartID);
-  chart.selectAll<SVGGElement, PieInfoType>('.elected')
-    .style('stroke', 'yellow')
-    .style('stroke-width', '2px');
+  const outline = g.select('#' + pieOutlineID);
+  outline.selectAll<SVGGElement, PieInfoType>('.elected')
+    .select('path')
+    .style('stroke', electedOutlineColor)
+    .style('stroke-width', `${electedOutlineWidth}px`);
 }
 
-// Generic function to create pie charts
+// Generic function to create pie charts.
+// outlineOnly: if true, paths are invisible (fill/stroke none) — used for the shadow outline pie.
 function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray,
                               x:number, y:number, innerRadius:number, outerRadius:number,
-                              displayText:boolean, growChart:boolean) :PieInfoArray {
+                              displayText:boolean, growChart:boolean,
+                              outlineOnly:boolean = false) :PieInfoArray {
 
   const eliminatedCandidates = getEliminatedCandidates(round);
   const electedCandidates = getElectedCandidates(round);
@@ -1029,9 +1054,15 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
                                           d.data.isTransfer === true)
     .classed('elected', d => electedCandidates.includes(d.data.label) &&
                                           !d.data.isTransfer)
-    .attr('id', d => pieKey(d.data))
-    .on('mouseenter', (d,i) => handleMouseEnter(d,i))
-    .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+    .attr('id', d => pieKey(d.data));
+
+  if (!outlineOnly) {
+    slices
+      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
+      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+  } else {
+    slices.style('pointer-events', 'none');
+  }
 
   const radialArc = d3.arc<PieOrArc>()
     .outerRadius(outerRadius)
@@ -1047,22 +1078,27 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
     slices
       .append('path')
         .attr('d', oldArc)
+        .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
+        .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth)
+        .attr('fill', 'none')
         .transition('global')
         .duration(shortTransition)
         .attr('d', d => radialArc(d))
-        .attr('fill', d => pickColor(d))
-        .on('end', d => raiseText());
+        .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
+        .on('end', d => { if (!outlineOnly) raiseText(); });
 
   } else {
     slices
       .append('path')
         .attr('d', d => radialArc(d))
-        .attr('fill', d => pickColor(d));
+        .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
+        .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
+        .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth);
 
-    raiseText();
+    if (!outlineOnly) raiseText();
   }
 
-  if (displayText) {
+  if (displayText && !outlineOnly) {
     displayTextLabels(round, info, x, y, outerRadius, eliminatedCandidates);
   }
   return info;
@@ -1155,7 +1191,8 @@ function raiseText():void {
 
 function updatePieChart(round: number, chartID:string, newData:PieDataArray,
                         innerRadius:number, outerRadius:number,
-                        displayText:boolean) : PieInfoArray {
+                        displayText:boolean,
+                        outlineOnly:boolean = false) : PieInfoArray {
 
   const updatedPie = d3.pie<PieData>()
     .sort(null)
@@ -1163,13 +1200,14 @@ function updatePieChart(round: number, chartID:string, newData:PieDataArray,
   const pieInfo:PieInfoArray = updatedPie(newData);
 
   updatePieChartWithInfo(round, chartID, pieInfo,
-                          innerRadius, outerRadius, displayText);
+                          innerRadius, outerRadius, displayText, outlineOnly);
 
   return pieInfo;
 }
 
 function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoArray,
-                                innerRadius:number, outerRadius:number, displayText:boolean):PieInfoArray {
+                                innerRadius:number, outerRadius:number, displayText:boolean,
+                                outlineOnly:boolean = false):PieInfoArray {
 
   const eliminatedCandidates = getEliminatedCandidates(round);
   const electedCandidates = getElectedCandidates(round);
@@ -1197,25 +1235,39 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
 
   // If there are slices coming in, they are because someone was elected and these
   // are the surplus votes they are transferring away.
-  slices
+  const entered = slices
     .enter()
     .append('g')
     .attr('class', 'slice')
     .attr('id', d => pieKey(d.data))
-    .classed('eliminated',true)
-    .on('mouseenter', (d,i) => handleMouseEnter(d,i))
-    .on('mouseleave', (d,i) => handleMouseLeave(d,i))
+    .classed('eliminated',true);
+
+  if (!outlineOnly) {
+    entered
+      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
+      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+  } else {
+    entered.style('pointer-events', 'none');
+  }
+
+  entered
     .append('path')
       .attr('d', d => radialArc(d))
-      .attr('fill', d => pickColor(d));
+      .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
+      .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
+      .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth);
 
   // This section is for already existing slices and will not be run for the newly
   // entering slices.
   slices
     .classed('eliminated', d => eliminatedCandidates.includes(d.data.label))
-    .classed('elected', d => electedCandidates.includes(d.data.label))
-    .on('mouseenter', (d,i) => handleMouseEnter(d,i))
-    .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+    .classed('elected', d => electedCandidates.includes(d.data.label));
+
+  if (!outlineOnly) {
+    slices
+      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
+      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+  }
 
 
   let transitionsRemaining = slices.size();
@@ -1223,7 +1275,9 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
   function raiseTextAtEnd() {
     transitionsRemaining--;
     if (transitionsRemaining <= 0) {
-      raiseText();
+      if (!outlineOnly) {
+        raiseText();
+      }
       chart.selectAll<SVGGElement, PieInfoType>('.finished').remove();
     }
   }
@@ -1249,7 +1303,7 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
       .on('end', raiseTextAtEnd);
 
 
-    if (displayText)
+    if (displayText && !outlineOnly)
       moveTextLabels(round, pieInfo, outerRadius, eliminatedCandidates);
 
     return pieInfo;
