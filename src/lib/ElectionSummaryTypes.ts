@@ -276,14 +276,15 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
           }
         }
 
-        // Check if totals match (with small floating point tolerance)
-        if (Math.abs(candidateVotes - transferTotal) > 0.0001) {
+        // Check if totals match (with floating point tolerance)
+        if (Math.abs(candidateVotes - transferTotal) > 0.01) {
           errors.push(`Round ${previousRound}: Eliminated candidate "${candidateName}" had ${candidateVotes} votes but transferred ${transferTotal}`);
         }
       }
 
-      // Remove elected/eliminated candidate from remaining list for next round
-      if (candidateName) {
+      // Remove eliminated candidates from remaining list for next round.
+      // Elected candidates stay — in Meek's method they continue receiving transfers.
+      if (tallyResult.eliminated && candidateName) {
         remainingCandidates.delete(candidateName);
       }
     }

@@ -155,6 +155,7 @@ function makeNewPie(round: number) {
   // Shadow outline pie — same geometry, invisible until elected
   createPieChart(round, pieOutlineID, pieDataGlobal, pieChartCenterX, pieChartCenterY,
                   0, smallPieRadius(), false, false, true);
+  outlineElected();
 }
 
 onMount(() => {
@@ -301,7 +302,7 @@ export function getElectedCandidates(round:number):string[] {
   let result:string[] = [];
   for (let r = 1; r <= round; r++)
     result = result.concat(chosenCandidates(r, 'elected'));
-  return result;
+  return [...new Set(result)];
 }
 
 
@@ -326,6 +327,8 @@ function countElectedTransfers(candidate:string, round:number) {
 }
 
 
+// Build pie data for a round WITHOUT splitting elected candidates' surplus.
+// Returns one entry per candidate plus exhausted.
 function prepareRoundData(round:number):PieDataArray {
 
   const summaryResults = jsonData.results;
@@ -339,22 +342,34 @@ function prepareRoundData(round:number):PieDataArray {
 
   roundTally = summaryResults[round-1].tally;
   for (let newObj of newData) {
-    const newValue = Number(roundTally[newObj.label]);
-    const electedTransfers = countElectedTransfers(newObj.label, round);
-    if (electedTransfers > 0) {
-      resultData.push({label: newObj.label, value: electedTransfers, isTransfer: true});
-      newObj.value = newValue - electedTransfers;
-      resultData.push(newObj)
-    } else {
-      newObj.value = newValue;
-      resultData.push(newObj);
-    }
+    newObj.value = Number(roundTally[newObj.label]);
+    resultData.push(newObj);
   }
 
   const exhaustedVotes = countExhaustedVotes(round);
   resultData.push({ label: 'exhausted',
                  value: exhaustedVotes });
 
+  return resultData;
+}
+
+// Split elected candidates' slices into retained votes + surplus transfer portion.
+// Returns a new array with transfer sub-slices inserted before their main slice.
+function splitElectedSurplus(data:PieDataArray, round:number):PieDataArray {
+  const resultData:PieDataArray = [];
+  for (const entry of data) {
+    if (entry.label === 'exhausted' || entry.isTransfer) {
+      resultData.push(entry);
+      continue;
+    }
+    const electedTransfers = countElectedTransfers(entry.label, round);
+    if (electedTransfers > 0) {
+      resultData.push({label: entry.label, value: electedTransfers, isTransfer: true});
+      resultData.push({...entry, value: entry.value - electedTransfers});
+    } else {
+      resultData.push(entry);
+    }
+  }
   return resultData;
 }
 
@@ -415,6 +430,18 @@ function animatePhase1(round:number, nextPhase:()=>void) {
   if (nextPhase) {
     t.on("end", nextPhase);
   }
+
+  // Split elected candidates' slices into retained + surplus-transfer portions.
+  // This must happen before displayDonut so the donut arcs anchor to the transfer sub-slice.
+  const splitData = splitElectedSurplus(pieDataGlobal, round);
+  const splitPie = d3.pie<PieData>().sort(null).value(d => d.value);
+  const splitPieInfo = splitPie(splitData);
+
+  applySplitToChart(round, pieChartID, splitPieInfo, 0, smallPieRadius());
+  applySplitToChart(round, pieOutlineID, splitPieInfo, 0, smallPieRadius(), true);
+
+  pieDataGlobal = splitData;
+  pieInfoGlobal = splitPieInfo;
 
   deleteDonut();
   displayDonut(round);
@@ -675,6 +702,9 @@ function updatePie(round:number):void {
   pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
   // Update shadow outline pie in sync
   updatePieChart(round, pieOutlineID, pieDataGlobal, 0, smallPieRadius(), false, true);
+  // Remove eliminated slices from outline pie — they're invisible and would accumulate
+  d3.select<SVGSVGElement | null, any>(svg).select('#' + pieOutlineID)
+    .selectAll('.eliminated').remove();
 }
 
 
@@ -1205,12 +1235,81 @@ function updatePieChart(round: number, chartID:string, newData:PieDataArray,
   return pieInfo;
 }
 
-function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoArray,
-                                innerRadius:number, outerRadius:number, displayText:boolean,
-                                outlineOnly:boolean = false):PieInfoArray {
+// Data join core: bind new pie data to existing slices, enter new slices,
+// update classes. Returns the d3 selection of existing (update) slices.
+// Used by both updatePieChartWithInfo (with transition) and applySplitToChart (instant).
+function applyDataJoin(round: number, chartID: string, pieInfo: PieInfoArray,
+                       radialArc: d3.Arc<any, PieOrArc>,
+                       outlineOnly: boolean = false) {
 
   const eliminatedCandidates = getEliminatedCandidates(round);
   const electedCandidates = getElectedCandidates(round);
+
+  const g = d3.select<SVGSVGElement | null, any>(svg);
+  const chart = g.select('#'+chartID);
+
+  const slices = chart.selectAll<SVGGElement, PieInfoType>('.slice')
+    .data(pieInfo, d => pieKey(d.data));
+
+  // Enter new slices (transfer sub-slices when splitting elected candidates)
+  const entered = slices
+    .enter()
+    .append('g')
+    .attr('class', 'slice')
+    .attr('id', d => pieKey(d.data))
+    .classed('eliminated', true);
+
+  if (!outlineOnly) {
+    entered
+      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
+      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+  } else {
+    entered.style('pointer-events', 'none');
+  }
+
+  entered
+    .append('path')
+      .attr('d', d => radialArc(d))
+      .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
+      .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
+      .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth);
+
+  // Update classes on existing slices
+  slices
+    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label))
+    .classed('elected', d => electedCandidates.includes(d.data.label));
+
+  if (!outlineOnly) {
+    slices
+      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
+      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
+  }
+
+  return slices;
+}
+
+// Apply split data to a chart instantly (no transition).
+// Updates existing slice paths to new angles and enters new slices.
+function applySplitToChart(round: number, chartID: string, pieInfo: PieInfoArray,
+                           innerRadius: number, outerRadius: number,
+                           outlineOnly: boolean = false): void {
+
+  const radialArc = d3.arc<PieOrArc>()
+    .outerRadius(outerRadius)
+    .innerRadius(innerRadius);
+
+  const slices = applyDataJoin(round, chartID, pieInfo, radialArc, outlineOnly);
+
+  // Update existing slice paths instantly (no transition)
+  slices
+    .select<SVGPathElement>('path')
+      .attr('d', d => radialArc(d))
+      .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)));
+}
+
+function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoArray,
+                                innerRadius:number, outerRadius:number, displayText:boolean,
+                                outlineOnly:boolean = false):PieInfoArray {
 
   const rotatorArc = d3.arc<DefaultArcObject>()
     .outerRadius(outerRadius)
@@ -1229,45 +1328,7 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
       .attr('prevStart', d => d.startAngle)
       .attr('prevEnd', d => d.endAngle);
 
-  const slices = chart.selectAll<SVGGElement, PieInfoType>('.slice')
-    .data(pieInfo, d => pieKey(d.data));
-
-
-  // If there are slices coming in, they are because someone was elected and these
-  // are the surplus votes they are transferring away.
-  const entered = slices
-    .enter()
-    .append('g')
-    .attr('class', 'slice')
-    .attr('id', d => pieKey(d.data))
-    .classed('eliminated',true);
-
-  if (!outlineOnly) {
-    entered
-      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
-      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
-  } else {
-    entered.style('pointer-events', 'none');
-  }
-
-  entered
-    .append('path')
-      .attr('d', d => radialArc(d))
-      .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
-      .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
-      .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth);
-
-  // This section is for already existing slices and will not be run for the newly
-  // entering slices.
-  slices
-    .classed('eliminated', d => eliminatedCandidates.includes(d.data.label))
-    .classed('elected', d => electedCandidates.includes(d.data.label));
-
-  if (!outlineOnly) {
-    slices
-      .on('mouseenter', (d,i) => handleMouseEnter(d,i))
-      .on('mouseleave', (d,i) => handleMouseLeave(d,i));
-  }
+  const slices = applyDataJoin(round, chartID, pieInfo, radialArc, outlineOnly);
 
 
   let transitionsRemaining = slices.size();
@@ -1304,7 +1365,7 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
 
 
     if (displayText && !outlineOnly)
-      moveTextLabels(round, pieInfo, outerRadius, eliminatedCandidates);
+      moveTextLabels(round, pieInfo, outerRadius, getEliminatedCandidates(round));
 
     return pieInfo;
 }
