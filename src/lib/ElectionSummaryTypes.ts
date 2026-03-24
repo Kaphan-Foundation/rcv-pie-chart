@@ -43,7 +43,8 @@ export interface RCtabInactiveBallots {
   exhaustedChoices ?: string,
   overvotes ?: string,
   repeatedRankings ?: string,
-  skippedRankings ?: string
+  skippedRankings ?: string,
+  finalRoundSurplus ?: string
 }
 
 export interface RCtabTally {

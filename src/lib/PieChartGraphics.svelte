@@ -268,7 +268,7 @@ function getActiveVotes(round:number) {
 //
 function chosenCandidates(round:number, key:'eliminated'|'elected'):string[] {
     if (!round || round < 1 || round > jsonData.results.length) {
-      console.warn('In chsoenCandidates: round ${round} is out of range.');
+      console.warn('In chosenCandidates: round ${round} is out of range.');
       return [];
     }
 
@@ -714,13 +714,28 @@ function shrinkDonut(innerRadius:number,outerRadius:number):void {
   const chart = d3.select<SVGSVGElement | null, any>(svg)
                   .select('#'+donutChartID);
 
-  // Destination arc shrinks slices down to the inner edge of the pie.
-  // innerRadius-1 avoids a D3 arc degenerate path when inner === outer.
-  const updatedArc = d3.arc<DefaultArcObject>()
-    .outerRadius(innerRadius)
-    .innerRadius(innerRadius-1);
+  const g = d3.select<SVGSVGElement | null, any>(svg);
+  const pieChart = g.select('#' + pieChartID);
 
-  const slices = chart.selectAll<SVGPathElement, DefaultArcObject>('.slice');
+  // Build a map of candidate name → { oldStart, oldEnd, newStart, newEnd }
+  // from the main pie's prevStart/prevEnd attrs and the new pieInfoGlobal.
+  const candidateAngles: Record<string, {
+    oldStart: number, oldEnd: number, newStart: number, newEnd: number
+  }> = {};
+  for (const info of pieInfoGlobal) {
+    const label = info.data.label;
+    if (info.data.isTransfer) continue;
+    const sliceEl = pieChart.select<SVGGElement>('#' + CSS.escape(pieKey(info.data)));
+    if (sliceEl.empty()) continue;
+    candidateAngles[label] = {
+      oldStart: Number(sliceEl.attr('prevStart')),
+      oldEnd: Number(sliceEl.attr('prevEnd')),
+      newStart: info.startAngle,
+      newEnd: info.endAngle
+    };
+  }
+
+  const slices = chart.selectAll<SVGPathElement, PieInfoType>('.slice');
 
   let slicesLeft = slices.size();
   function cleanUpAtEnd() {
@@ -734,7 +749,42 @@ function shrinkDonut(innerRadius:number,outerRadius:number):void {
     .select('path')
       .transition('global')
       .duration(shortTransition)
-      .attr('d', d => updatedArc(d))
+      .attrTween('d', function(d) {
+        const donutStart = d.startAngle;
+        const donutEnd = d.endAngle;
+        const donutAngle = donutEnd - donutStart;
+
+        // Find where this donut slice's target candidate is moving
+        const target = candidateAngles[d.data.label];
+        let targetStart: number, targetEnd: number;
+        if (target) {
+          // Donut slice's offset relative to old candidate midpoint
+          const oldMid = (target.oldStart + target.oldEnd) / 2;
+          const newMid = (target.newStart + target.newEnd) / 2;
+          const offset = donutStart - oldMid;
+          targetStart = newMid + offset;
+          targetEnd = targetStart + donutAngle;
+        } else {
+          // Exhausted or unmatched — keep in place
+          targetStart = donutStart;
+          targetEnd = donutEnd;
+        }
+
+        const interpStart = d3.interpolate(donutStart, targetStart);
+        const interpEnd = d3.interpolate(donutEnd, targetEnd);
+        const interpOuter = d3.interpolate(outerRadius, innerRadius);
+
+        const arc = d3.arc<DefaultArcObject>();
+
+        return function(t) {
+          // innerRadius-1 avoids a D3 arc degenerate path when inner === outer
+          arc.innerRadius(Math.min(interpOuter(t), innerRadius) - 1)
+             .outerRadius(interpOuter(t))
+             .startAngle(interpStart(t))
+             .endAngle(interpEnd(t));
+          return arc(d as unknown as DefaultArcObject)!;
+        };
+      })
       .on('end', d => cleanUpAtEnd());
 
 }

@@ -155,7 +155,7 @@ $effect(() => handleMouseEvent());
 
 
 function verbPhrase(votes: number, past: boolean): string {
-  if (votes == 1)
+  if (votes === 1)
     return past ? 'vote was' : 'vote will be';
   else
     return past ? 'votes were' : 'votes will be';
@@ -169,7 +169,7 @@ function popupReport(candidate: string, round: number): [string[], string] {
 
   let tallyVotes;
 
-  if (candidate == 'exhausted') {
+  if (candidate === 'exhausted') {
     //tallyVotes = jsonData.results[0].inactiveBallots.exhaustedChoices;
     tallyVotes = countExhaustedVotes(1);
   } else {
@@ -180,7 +180,7 @@ function popupReport(candidate: string, round: number): [string[], string] {
 
   for (let r = 1; r <= round; r++) {
     if (r === round) {
-      if (candidate == 'exhausted') {
+      if (candidate === 'exhausted') {
         //tallyVotes = jsonData.results[round-1].inactiveBallots.exhaustedChoices;
         tallyVotes = countExhaustedVotes(round);
       } else {
