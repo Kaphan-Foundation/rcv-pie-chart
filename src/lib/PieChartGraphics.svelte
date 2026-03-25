@@ -1229,6 +1229,7 @@ function grayOutEliminated(innerRadius:number,outerRadius:number) {
   slices
     .classed('finished', true)
     .select('path')
+      .attr('stroke', 'none')
       .transition('global')
       .duration(shortTransition)
       .attrTween('d', function(d) {
@@ -1391,7 +1392,6 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
 
   const slices = applyDataJoin(round, chartID, pieInfo, radialArc, outlineOnly);
 
-
   let transitionsRemaining = slices.size();
 
   function raiseTextAtEnd() {
@@ -1422,7 +1422,13 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
           return rotatorArc(d as unknown as DefaultArcObject)!;
         };
       })
-      .on('end', raiseTextAtEnd);
+      .on('end', function(d) {
+        // Clear stroke on slices that transitioned to zero width
+        if (d.startAngle === d.endAngle) {
+          d3.select(this).attr('stroke', 'none');
+        }
+        raiseTextAtEnd();
+      });
 
 
     if (displayText && !outlineOnly)
