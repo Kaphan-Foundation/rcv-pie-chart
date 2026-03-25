@@ -291,8 +291,10 @@ function getPhaseLabels(round: number): string[] {
 
 // The stepper is disabled when there are no transfers to animate.
 // The animation for round N shows the previous round's (N-1) transfers.
+// Also disabled on the last round — nothing to advance to.
 function isStepperDisabled(round: number): boolean {
   if (!jsonData?.results || round < 2 || round > jsonData.results.length) return true;
+  if (round === jsonData.results.length) return true;
   const tallyResults = jsonData.results[round - 2].tallyResults;
   return tallyResults.length === 0 ||
     tallyResults.every((tr: RCtabTallyResults) => Object.keys(tr.transfers).length === 0);
