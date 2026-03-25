@@ -552,8 +552,10 @@ function doAnimateOneRound(targetRound: number) {
   animationRound = targetRound;
   displayPhase = 0;
   animatePhase1(animationRound-1, () => {
+    displayPhase = 1;
     animatePhase2(animationRound-1, () => {
-      animatePhase3(animationRound, stopAnimating);
+      displayPhase = 2;
+      animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
     });
   });
 }
@@ -580,10 +582,12 @@ function runAnimationCycle() {
   }
 
   const nextPhase = animationRound < jsonData.results.length - 1 ?
-      runAnimationCycle : stopAnimating;
+      runAnimationCycle : () => { displayPhase = 0; stopAnimating(); };
 
   animatePhase1(animationRound, () => {
+    displayPhase = 1;
     animatePhase2(animationRound, () => {
+      displayPhase = 2;
       animationRound++;
       tryRequestRoundChange(animationRound);
       animatePhase3(animationRound, nextPhase);
@@ -653,18 +657,20 @@ function animateOneRoundFn() {
   isAnimating = true;
   if (displayPhase === 0) {
     animatePhase1(animationRound-1, () => {
+      displayPhase = 1;
       animatePhase2(animationRound-1, () => {
-        animatePhase3(animationRound, stopAnimating);
+        displayPhase = 2;
+        animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
       });
     });
   } else if (displayPhase === 1) {
     animatePhase2(animationRound-1, () => {
-        animatePhase3(animationRound, stopAnimating);
+        displayPhase = 2;
+        animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
       });
   } else if (displayPhase === 2) {
-    animatePhase3(animationRound, stopAnimating);
+    animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
   }
-  displayPhase = 0;
 
 }
 
@@ -686,17 +692,18 @@ export function animateOnePhaseFn():void {
   }
 
   isAnimating = true;
-  displayPhase = (displayPhase + 1) % 3;
   animationRound = currentRound;
 
-  if (displayPhase === 1) {
-    animatePhase1(animationRound, stopAnimating);
+  // displayPhase shows current phase: 0=Eliminate, 1=Transfer, 2=Consolidate
+  // Advance displayPhase only after the animation completes (in the callback).
+  if (displayPhase === 0) {
+    animatePhase1(animationRound, () => { displayPhase = 1; stopAnimating(); });
+  } else if (displayPhase === 1) {
+    animatePhase2(animationRound, () => { displayPhase = 2; stopAnimating(); });
   } else if (displayPhase === 2) {
-    animatePhase2(animationRound, stopAnimating);
-  } else if (displayPhase === 0) {
     animationRound++;
     tryRequestRoundChange(animationRound);
-    animatePhase3(animationRound, stopAnimating);
+    animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
   } else {
     isAnimating = false;
     console.warn('displayPhase out of range at ', displayPhase);

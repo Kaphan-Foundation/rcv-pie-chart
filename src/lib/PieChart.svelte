@@ -3,6 +3,7 @@
 <script lang="ts">
 
 import PieChartGraphics from '$components/PieChartGraphics.svelte';
+import PhaseStepper from '$lib/components/PhaseStepper.svelte';
 
 import type { RCtabSummary, RCtabTally, RCtabTallyResults,RCtabResults, JSONValue } from '$lib/ElectionSummaryTypes';
 import { validateRCtabSummary } from '$lib/ElectionSummaryTypes';
@@ -273,10 +274,29 @@ interface PieChartGraphicsType {
   exhaustedLabel: string;
 }
 
-const phaseLabels = ['Eliminate', 'Transfer', 'Consolidate'] as const;
-
 let pieChartGraphicsInstance: PieChartGraphicsType;
 let displayPhase = $state(0);
+
+// Determine the first phase label based on what the animation will show.
+// The animation for round N shows the previous round's (N-1) transfers.
+function getPhaseLabels(round: number): string[] {
+  if (!jsonData?.results || round < 2 || round > jsonData.results.length) {
+    return ['Eliminate', 'Transfer', 'Consolidate'];
+  }
+  const tallyResults = jsonData.results[round - 2].tallyResults;
+  const hasElimination = tallyResults.some((tr: RCtabTallyResults) => tr.eliminated);
+  const firstLabel = hasElimination ? 'Eliminate' : 'Surplus';
+  return [firstLabel, 'Transfer', 'Consolidate'];
+}
+
+// The stepper is disabled when there are no transfers to animate.
+// The animation for round N shows the previous round's (N-1) transfers.
+function isStepperDisabled(round: number): boolean {
+  if (!jsonData?.results || round < 2 || round > jsonData.results.length) return true;
+  const tallyResults = jsonData.results[round - 2].tallyResults;
+  return tallyResults.length === 0 ||
+    tallyResults.every((tr: RCtabTallyResults) => Object.keys(tr.transfers).length === 0);
+}
 
 function isFinalRoundSuppressed(round: number): boolean {
   return excludeFinalWinnerAndEliminatedCandidate
@@ -373,20 +393,6 @@ function pieColors() : ColorMap {
   margin: 0.5rem;
 }
 
-.animation-button-container button {
-  background-color: #4747ff;
-  color: #fff;
-  padding: 4px 10px;
-  font-size: 0.8rem;
-  min-width: 107px;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.animation-button-container button:hover {
-  background-color: #4747c2;
-}
 
 .pie-chart-container {
   width: 100%;
@@ -444,15 +450,12 @@ h3, h4 {
 
   
 <div class="animation-button-container">
-  <!-- Animate All button removed — RoundPlayer handles this now
-  <button class="next-button" onclick={runFullAnimation}>
-    Animate All
-  </button>
-  -->
-
-  <button class="next-button" onclick={animateOnePhase}>
-    {phaseLabels[displayPhase]}
-  </button>
+  <PhaseStepper
+    labels={getPhaseLabels(currentRound)}
+    currentStep={displayPhase}
+    disabled={isStepperDisabled(currentRound)}
+    onAdvance={animateOnePhase}
+  />
 </div>
 <div class="common-header">  <!-- if I take out this div, the buttons above stop working! -->
 </div>
