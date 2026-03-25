@@ -327,29 +327,35 @@ function countElectedTransfers(candidate:string, round:number) {
 }
 
 
-// Build pie data for a round WITHOUT splitting elected candidates' surplus.
-// Returns one entry per candidate plus exhausted.
+// Add exhausted votes if the tally doesn't already include them
+// under another name (e.g., 'Inactive Ballots' from rcvis).
+function appendExhaustedIfNeeded(resultData:PieDataArray, round:number):void {
+  if (!resultData.some(d => isExhaustedLabel(d.label))) {
+    resultData.push({ label: 'exhausted', value: countExhaustedVotes(round) });
+  }
+}
+
+// Build pie data from the current round's tally only.
+// Used when creating a fresh pie (no transition history).
 function prepareRoundData(round:number):PieDataArray {
-
-  const summaryResults = jsonData.results;
-  let roundTally = summaryResults[Math.max(0,round-2)].tally;
-  const newData:PieDataArray = [];
   const resultData:PieDataArray = [];
-  for (let [name, votes] of Object.entries(roundTally)) {
-      newData.push({label: name,
-                    value: 0});
+  for (let [name, votes] of Object.entries(jsonData.results[round-1].tally)) {
+    resultData.push({label: name, value: Number(votes)});
   }
+  appendExhaustedIfNeeded(resultData, round);
+  return resultData;
+}
 
-  roundTally = summaryResults[round-1].tally;
-  for (let newObj of newData) {
-    newObj.value = Number(roundTally[newObj.label]);
-    resultData.push(newObj);
+// Build pie data for a transition, including candidates from the previous round
+// who were just eliminated (with 0 votes) so the transition can shrink them.
+function prepareTransitionData(round:number):PieDataArray {
+  const prevRoundTally = jsonData.results[Math.max(0,round-2)].tally;
+  const currentRoundTally = jsonData.results[round-1].tally;
+  const resultData:PieDataArray = [];
+  for (let [name] of Object.entries(prevRoundTally)) {
+    resultData.push({label: name, value: Number(currentRoundTally[name] ?? 0)});
   }
-
-  const exhaustedVotes = countExhaustedVotes(round);
-  resultData.push({ label: 'exhausted',
-                 value: exhaustedVotes });
-
+  appendExhaustedIfNeeded(resultData, round);
   return resultData;
 }
 
@@ -698,7 +704,7 @@ export function animateOnePhaseFn():void {
 }
 
 function updatePie(round:number):void {
-  pieDataGlobal = prepareRoundData(round);
+  pieDataGlobal = prepareTransitionData(round);
   pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
   // Update shadow outline pie in sync
   updatePieChart(round, pieOutlineID, pieDataGlobal, 0, smallPieRadius(), false, true);
@@ -1155,7 +1161,7 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
       .outerRadius(innerRadius+1)
       .innerRadius(innerRadius);
 
-    slices
+    const paths = slices
       .append('path')
         .attr('d', oldArc)
         .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
@@ -1164,8 +1170,13 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
         .transition('global')
         .duration(shortTransition)
         .attr('d', d => radialArc(d))
-        .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
         .on('end', d => { if (!outlineOnly) raiseText(); });
+
+    if (outlineOnly) {
+      paths.attr('fill', 'none');
+    } else {
+      paths.attr('fill', (d: PieInfoType) => pickColor(d));
+    }
 
   } else {
     slices

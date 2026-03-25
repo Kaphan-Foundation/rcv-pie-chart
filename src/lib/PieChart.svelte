@@ -376,8 +376,8 @@ function pieColors() : ColorMap {
 .animation-button-container button {
   background-color: #4747ff;
   color: #fff;
-  padding: 1px 7px;
-  font-size: 0.67rem;
+  padding: 4px 10px;
+  font-size: 0.8rem;
   min-width: 107px;
   border: none;
   border-radius: 3px;
