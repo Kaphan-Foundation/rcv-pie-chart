@@ -278,24 +278,22 @@ let pieChartGraphicsInstance: PieChartGraphicsType;
 let displayPhase = $state(0);
 
 // Determine the first phase label based on what the animation will show.
-// The animation for round N shows the previous round's (N-1) transfers.
 function getPhaseLabels(round: number): string[] {
-  if (!jsonData?.results || round < 2 || round > jsonData.results.length) {
+  if (!jsonData?.results || round < 1 || round > jsonData.results.length) {
     return ['Eliminate', 'Transfer', 'Consolidate'];
   }
-  const tallyResults = jsonData.results[round - 2].tallyResults;
+  const tallyResults = jsonData.results[round - 1].tallyResults;
   const hasElimination = tallyResults.some((tr: RCtabTallyResults) => tr.eliminated);
   const firstLabel = hasElimination ? 'Eliminate' : 'Surplus';
   return [firstLabel, 'Transfer', 'Consolidate'];
 }
 
 // The stepper is disabled when there are no transfers to animate.
-// The animation for round N shows the previous round's (N-1) transfers.
 // Also disabled on the last round — nothing to advance to.
 function isStepperDisabled(round: number): boolean {
-  if (!jsonData?.results || round < 2 || round > jsonData.results.length) return true;
+  if (!jsonData?.results || round < 1 || round > jsonData.results.length) return true;
   if (round === jsonData.results.length) return true;
-  const tallyResults = jsonData.results[round - 2].tallyResults;
+  const tallyResults = jsonData.results[round - 1].tallyResults;
   return tallyResults.length === 0 ||
     tallyResults.every((tr: RCtabTallyResults) => Object.keys(tr.transfers).length === 0);
 }
