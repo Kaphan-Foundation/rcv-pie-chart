@@ -1,8 +1,14 @@
 {
   "name": "rcv-pie-chart",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
+  "description": "Animated pie chart web component for ranked choice voting visualizations",
+  "module": "dist/pie-chart.es.js",
+  "files": [
+    "dist/pie-chart.es.js",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",

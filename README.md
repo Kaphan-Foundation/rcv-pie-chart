@@ -132,4 +132,4 @@ src/lib/
 
 ## License
 
-TBD
+MIT
