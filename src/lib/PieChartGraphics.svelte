@@ -990,6 +990,78 @@ function updateDonutInfo(round: number, donutInfo:PieInfoArray, pieInfo:PieInfoA
 }
 
 
+/**
+ * Compute which labels can be displayed without overlapping.
+ * Renders all candidate labels invisibly, measures bounding boxes,
+ * then greedily selects labels in descending vote order, skipping
+ * any that would overlap a previously placed label.
+ * Returns a Set of candidate labels that should be visible.
+ */
+function computeVisibleLabels(round: number, pieInfo: PieInfoArray,
+                               outerRadius: number,
+                               parentGroup: d3.Selection<SVGGElement, unknown, null, undefined>): Set<string> {
+  const textArc = d3.arc<PieOrArc>()
+    .innerRadius(outerRadius * textArcRadius)
+    .outerRadius(outerRadius * textArcRadius);
+
+  // Render all non-transfer labels invisibly to measure bounding boxes
+  const candidates = pieInfo.filter(d => !d.data.isTransfer && d.data.value > 0);
+  const measurements: { label: string; value: number; bbox: DOMRect }[] = [];
+
+  const tempGroup = parentGroup.append('g').attr('opacity', 0);
+
+  for (const d of candidates) {
+    const displayName = d.data.label === 'exhausted' ? exhaustedLabel : d.data.label;
+    const centroid = textArc.centroid(d as any);
+    const anchor = textLabelPosition(d.startAngle, d.endAngle);
+    const votes = candidateVotesStr(d.data.label, round);
+    let secondLine: string;
+    if (!firstRoundDeterminesPercentages && isExhaustedLabel(d.data.label)) {
+      secondLine = votes;
+    } else {
+      secondLine = votes + ' (' + candidatePercentage(d.data.label, round) + ')';
+    }
+
+    const textEl = tempGroup.append('text')
+      .attr('transform', `translate(${centroid})`)
+      .attr('text-anchor', anchor)
+      .text(displayName);
+    textEl.append('tspan')
+      .attr('x', 0)
+      .attr('dy', '1.2em')
+      .text(secondLine);
+
+    const bbox = (textEl.node() as SVGTextElement).getBBox();
+    // getBBox is in local coords — offset by centroid for absolute position
+    measurements.push({
+      label: d.data.label,
+      value: d.data.value,
+      bbox: new DOMRect(bbox.x + centroid[0], bbox.y + centroid[1], bbox.width, bbox.height),
+    });
+  }
+
+  tempGroup.remove();
+
+  // Sort by vote count descending — biggest labels get priority
+  measurements.sort((a, b) => b.value - a.value);
+
+  const placed: DOMRect[] = [];
+  const visible = new Set<string>();
+
+  for (const m of measurements) {
+    const overlaps = placed.some(p =>
+      m.bbox.left < p.right && m.bbox.right > p.left &&
+      m.bbox.top < p.bottom && m.bbox.bottom > p.top
+    );
+    if (!overlaps) {
+      visible.add(m.label);
+      placed.push(m.bbox);
+    }
+  }
+
+  return visible;
+}
+
 function displayTextLabels(round: number, pieInfo:PieInfoArray,
                             x:number, y:number, outerRadius:number, eliminatedCandidates:string[]) {
 
@@ -1003,12 +1075,14 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
     .innerRadius(outerRadius * textArcRadius)
     .outerRadius(outerRadius * textArcRadius);
 
+  // Compute which labels fit without overlapping
+  const visibleLabels = computeVisibleLabels(round, pieInfo, outerRadius, textLayer);
+
   const textSlices = textLayer.selectAll<SVGTextElement, PieInfoType>('text')
     .data(pieInfo)
     .enter()
     .each(function (d:PieInfoType) {
-      if (!(d.endAngle - d.startAngle < minimumTextAngle ||
-            d.data.isTransfer)) {
+      if (!d.data.isTransfer && visibleLabels.has(d.data.label)) {
         d3.select<SVGGElement, PieInfoType>(this as SVGGElement)
           .append('g')
           .attr('id', d => pieKey(d.data))
@@ -1047,6 +1121,16 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
 function moveTextLabels(round: number, pieInfo:PieInfoArray, outerRadius:number, eliminatedCandidates:string[]) {
   const g = d3.select<SVGSVGElement | null, any>(svg);
   const textLayer = g.select('#' + textLayerID);
+
+  // Compute which labels will be visible at the destination
+  const destVisible = computeVisibleLabels(round, pieInfo, outerRadius, textLayer);
+
+  // Hide labels that won't be visible at destination before the transition
+  textLayer.selectAll<SVGGElement, PieInfoType>('g').each(function(d) {
+    if (d && d.data && !d.data.isTransfer && !destVisible.has(d.data.label)) {
+      d3.select(this).remove();
+    }
+  });
 
   const tspans = textLayer.selectAll<SVGTSpanElement, PieInfoType>('tspan');
 
@@ -1171,19 +1255,13 @@ function createPieChartWithInfo(round: number, chartID:string, info:PieInfoArray
     const paths = slices
       .append('path')
         .attr('d', oldArc)
-        .attr('stroke', outlineOnly ? 'none' : sliceSeparatorColor)
-        .attr('stroke-width', outlineOnly ? 0 : sliceSeparatorWidth)
-        .attr('fill', 'none')
+        .attr('stroke', outlineOnly ? 'none' : innerRadius === 0 ? sliceSeparatorColor : 'none')
+        .attr('stroke-width', outlineOnly ? 0 : innerRadius === 0 ? sliceSeparatorWidth : 0)
+        .attr('fill', outlineOnly ? 'none' : (d => pickColor(d)))
         .transition('global')
         .duration(shortTransition)
         .attr('d', d => radialArc(d))
         .on('end', d => { if (!outlineOnly) raiseText(); });
-
-    if (outlineOnly) {
-      paths.attr('fill', 'none');
-    } else {
-      paths.attr('fill', (d: PieInfoType) => pickColor(d));
-    }
 
   } else {
     slices
