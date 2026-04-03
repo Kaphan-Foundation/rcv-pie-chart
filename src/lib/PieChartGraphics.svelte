@@ -713,11 +713,8 @@ export function animateOnePhaseFn():void {
 function updatePie(round:number):void {
   pieDataGlobal = prepareTransitionData(round);
   pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
-  // Update shadow outline pie in sync
+  // Update shadow outline pie in sync — exit() in applyDataJoin handles cleanup
   updatePieChart(round, pieOutlineID, pieDataGlobal, 0, smallPieRadius(), false, true);
-  // Remove eliminated slices from outline pie — they're invisible and would accumulate
-  d3.select<SVGSVGElement | null, any>(svg).select('#' + pieOutlineID)
-    .selectAll('.eliminated').remove();
 }
 
 
@@ -1398,6 +1395,11 @@ function applyDataJoin(round: number, chartID: string, pieInfo: PieInfoArray,
   const slices = chart.selectAll<SVGGElement, PieInfoType>('.slice')
     .data(pieInfo, d => pieKey(d.data));
 
+  // Exit: remove slices no longer in the data (eliminated candidates
+  // drop out of prepareTransitionData one round after elimination,
+  // along with any clones created by grayOutEliminated).
+  slices.exit().remove();
+
   // Enter new slices (transfer sub-slices when splitting elected candidates)
   const entered = slices
     .enter()
@@ -1485,7 +1487,6 @@ function updatePieChartWithInfo(round: number, chartID:string, pieInfo:PieInfoAr
       if (!outlineOnly) {
         raiseText();
       }
-      chart.selectAll<SVGGElement, PieInfoType>('.finished').remove();
     }
   }
     // Update existing slices
