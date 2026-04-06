@@ -17,6 +17,7 @@ let { electionSummary,
       textForWinner = 'elected',
       excludeFinalWinnerAndEliminatedCandidate = false,
       firstRoundDeterminesPercentages = false,
+      randomizeOrder = false,
       showCaptions = false,
     } : {
       electionSummary : RCtabSummary|string,
@@ -26,6 +27,7 @@ let { electionSummary,
       textForWinner: string,
       excludeFinalWinnerAndEliminatedCandidate: boolean,
       firstRoundDeterminesPercentages: boolean,
+      randomizeOrder: boolean,
       showCaptions: boolean,
 
     } = $props();
@@ -474,6 +476,7 @@ h3, h4 {
             candidateColors={candidateColors}
             excludeFinalWinnerAndEliminatedCandidate={excludeFinalWinnerAndEliminatedCandidate}
             firstRoundDeterminesPercentages={firstRoundDeterminesPercentages}
+            randomizeOrder={randomizeOrder}
             bind:displayPhase={displayPhase}
           />
       </div>

@@ -28,6 +28,7 @@ let {
   candidateColors = [],
   excludeFinalWinnerAndEliminatedCandidate = false,
   firstRoundDeterminesPercentages = false,
+  randomizeOrder = false,
   displayPhase = $bindable(0),
 } : {
   jsonData: RCtabSummary,
@@ -40,6 +41,7 @@ let {
   candidateColors: string[],
   excludeFinalWinnerAndEliminatedCandidate: boolean,
   firstRoundDeterminesPercentages: boolean,
+  randomizeOrder: boolean,
   displayPhase: number,
 } = $props();
 
@@ -335,12 +337,59 @@ function appendExhaustedIfNeeded(resultData:PieDataArray, round:number):void {
   }
 }
 
+// Seeded shuffle: spreads differently-sized pie slices around the circle
+// to prevent clustering and label overlap. Deterministic for same contest name.
+
+// mulberry32: simple 32-bit seeded PRNG
+function mulberry32(seed: number): () => number {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Simple string hash (djb2) producing a 32-bit seed
+function hashString(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
+// Deterministic Fisher-Yates shuffle using contest name as seed.
+// Skips shuffle for 3 or fewer candidates.
+function scatterOrder(names: string[]): string[] {
+  if (names.length <= 3) return names;
+  const seed = hashString(jsonData.config?.contest ?? '');
+  const rng = mulberry32(seed);
+  const result = [...names];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Compute stable candidate ordering from round 1, reused for all rounds.
+// When randomizeOrder is true, slices are scattered for even size distribution.
+function getCandidateOrder(): string[] {
+  const names = Object.keys(jsonData.results[0].tally);
+  return randomizeOrder ? scatterOrder(names) : names;
+}
+
 // Build pie data from the current round's tally only.
 // Used when creating a fresh pie (no transition history).
 function prepareRoundData(round:number):PieDataArray {
+  const tally = jsonData.results[round-1].tally;
   const resultData:PieDataArray = [];
-  for (let [name, votes] of Object.entries(jsonData.results[round-1].tally)) {
-    resultData.push({label: name, value: Number(votes)});
+  for (const name of getCandidateOrder()) {
+    if (name in tally) {
+      resultData.push({label: name, value: Number(tally[name])});
+    }
   }
   appendExhaustedIfNeeded(resultData, round);
   return resultData;
@@ -349,10 +398,9 @@ function prepareRoundData(round:number):PieDataArray {
 // Build pie data for a transition, including candidates from the previous round
 // who were just eliminated (with 0 votes) so the transition can shrink them.
 function prepareTransitionData(round:number):PieDataArray {
-  const prevRoundTally = jsonData.results[Math.max(0,round-2)].tally;
   const currentRoundTally = jsonData.results[round-1].tally;
   const resultData:PieDataArray = [];
-  for (let [name] of Object.entries(prevRoundTally)) {
+  for (const name of getCandidateOrder()) {
     resultData.push({label: name, value: Number(currentRoundTally[name] ?? 0)});
   }
   appendExhaustedIfNeeded(resultData, round);
