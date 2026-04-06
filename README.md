@@ -63,6 +63,7 @@ With optional attributes:
   showCaptions="true"
   textForWinner="winner"
   candidateColors='["#e41a1c", "#377eb8", "#4daf4a", "#984ea3"]'
+  randomizeOrder="true"
 ></pie-chart>
 ```
 
@@ -109,6 +110,7 @@ The JSON structure looks like:
 | `showCaptions` | `boolean` | `false` | Show narration text below the chart describing eliminations and elections per round |
 | `firstRoundDeterminesPercentages` | `boolean` | `true` | When true, percentages use first-round active votes as the denominator (so the total stays at 100% even as votes are exhausted). When false, the denominator is the current round's active votes, which decrease as candidates are eliminated. |
 | `excludeFinalWinnerAndEliminatedCandidate` | `boolean` | `false` | When true, removes the final winner and last eliminated candidate from the display |
+| `randomizeOrder` | `boolean` | `false` | When true, randomizes the display order of candidates. This distributes pie slice sizes more evenly, allowing more labels to be shown (labels that would overlap are hidden). |
 
 ### Animation controls
 
