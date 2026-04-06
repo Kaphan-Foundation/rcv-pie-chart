@@ -384,8 +384,11 @@ function scatterOrder(names: string[]): string[] {
 // Compute stable candidate ordering from round 1, reused for all rounds.
 // When randomizeOrder is true, slices are scattered for even size distribution.
 function getCandidateOrder(): string[] {
-  const names = Object.keys(jsonData.results[0].tally);
-  return randomizeOrder ? scatterOrder(names) : names;
+  const allNames = Object.keys(jsonData.results[0].tally);
+  const active = allNames.filter(n => !isExhaustedLabel(n));
+  const inactive = allNames.filter(n => isExhaustedLabel(n));
+  const ordered = randomizeOrder ? scatterOrder(active) : active;
+  return [...ordered, ...inactive];
 }
 
 // Build pie data from the current round's tally only.
