@@ -328,6 +328,13 @@ function countElectedTransfers(candidate:string, round:number) {
   return votesTransferred;
 }
 
+// True if the round has any non-empty transfers to animate.
+function roundHasTransfers(round: number): boolean {
+  if (round < 1 || round > jsonData.results.length) return false;
+  const tallyResults = jsonData.results[round-1].tallyResults;
+  return tallyResults.length > 0 &&
+    tallyResults.some((tr: RCtabTallyResults) => Object.keys(tr.transfers).length > 0);
+}
 
 // Add exhausted votes if the tally doesn't already include them
 // under another name (e.g., 'Inactive Ballots' from rcvis).
@@ -538,6 +545,15 @@ let actionQueue: QueuedAction[] = [];
 function stopAnimating() {
   outlineElected();
   isAnimating = false;
+
+  // If we landed on a round with no outgoing transfers, auto-advance
+  // so the user doesn't have to click through a round with nothing to show.
+  if (actionQueue.length === 0
+      && currentRound < jsonData.results.length
+      && !roundHasTransfers(currentRound)) {
+    tryRequestRoundChange(currentRound + 1);
+  }
+
   processNextAction();
 }
 
@@ -599,6 +615,7 @@ function doAnimateOneRound(targetRound: number) {
   isAnimating = true;
   animationRound = targetRound;
   displayPhase = 0;
+
   animatePhase1(animationRound-1, () => {
     displayPhase = 1;
     animatePhase2(animationRound-1, () => {
@@ -626,6 +643,20 @@ function runAnimationCycle() {
   // If user performed actions during animation, stop auto-play and process them
   if (actionQueue.length > 0) {
     stopAnimating();
+    return;
+  }
+
+  // No transfers to animate — skip to next round immediately.
+  if (!roundHasTransfers(animationRound)) {
+    animationRound++;
+    tryRequestRoundChange(animationRound);
+    makeNewPie(animationRound);
+    if (animationRound < jsonData.results.length) {
+      runAnimationCycle();
+    } else {
+      displayPhase = 0;
+      stopAnimating();
+    }
     return;
   }
 
@@ -957,8 +988,7 @@ function makeDonutInfo(round:number, pieInfo:PieInfoArray):PieInfoArray {
         newObj = {data: {label:name, value:Number(votes)},
                   value: 0, index: 0, startAngle:0, endAngle:0, padAngle:0};  // only needed to keep Typescript happy.
       } else if (name == 'residual surplus') {
-        console.warn('makeDonutInfo: residual surplus = ', votes);
-        continue;
+        continue;  // expected in RCTab output; silently ignore
       } else {
         console.warn('makeDonutInfo: unrecognized name in transfers ', name);
         continue;
@@ -987,7 +1017,9 @@ function getTransferStartAngles(transferVotes:NameNumberMap, totalVotes:number, 
 
     const mainPieObj = pieInfo.find(obj => name == obj.data.label);
     if (mainPieObj === undefined) {
-      console.warn( 'getTransferStartAngles: mainPieObj not found for ', name);
+      if (name !== 'residual surplus') {
+        console.warn( 'getTransferStartAngles: mainPieObj not found for ', name);
+      }
       continue;
     }
     const midpoint = (mainPieObj.startAngle + mainPieObj.endAngle)/2;

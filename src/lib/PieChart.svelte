@@ -148,6 +148,8 @@ function handleMouseEvent(): void {
       if (exhaustedExplainer)
         exhaustedExplainer.style.opacity = '0';
       break;
+    case '':
+      break;
     default:
       console.log('Unknown mouse event: ', mouseEventType);
       break;
