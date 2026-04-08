@@ -336,6 +336,15 @@ function roundHasTransfers(round: number): boolean {
     tallyResults.some((tr: RCtabTallyResults) => Object.keys(tr.transfers).length > 0);
 }
 
+// Find the next round >= fromRound that has transfers, or the last round.
+function nextRoundWithTransfers(fromRound: number): number {
+  const lastRound = jsonData.results.length;
+  for (let r = fromRound; r < lastRound; r++) {
+    if (roundHasTransfers(r)) return r;
+  }
+  return lastRound;
+}
+
 // Add exhausted votes if the tally doesn't already include them
 // under another name (e.g., 'Inactive Ballots' from rcvis).
 function appendExhaustedIfNeeded(resultData:PieDataArray, round:number):void {
@@ -550,11 +559,12 @@ function stopAnimating() {
   isAnimating = false;
 
   // If we landed on a round with no outgoing transfers, auto-advance
-  // so the user doesn't have to click through a round with nothing to show.
+  // to the next round that does (or the last round).
   if (actionQueue.length === 0
       && currentRound < jsonData.results.length
       && !roundHasTransfers(currentRound)) {
-    tryRequestRoundChange(currentRound + 1);
+    const target = nextRoundWithTransfers(currentRound);
+    tryRequestRoundChange(target);
   }
 
   processNextAction();
@@ -619,6 +629,17 @@ function doAnimateOneRound(targetRound: number) {
   animationRound = targetRound;
   displayPhase = 0;
 
+  // Skip past consecutive no-transfer rounds.
+  if (!roundHasTransfers(animationRound - 1)) {
+    const target = nextRoundWithTransfers(animationRound - 1);
+    if (target > animationRound) {
+      animationRound = target;
+      tryRequestRoundChange(animationRound);
+    }
+    stopAnimating();
+    return;
+  }
+
   animatePhase1(animationRound-1, () => {
     displayPhase = 1;
     animatePhase2(animationRound-1, () => {
@@ -649,9 +670,9 @@ function runAnimationCycle() {
     return;
   }
 
-  // No transfers to animate — skip to next round immediately.
+  // No transfers to animate — skip to the next round that has transfers.
   if (!roundHasTransfers(animationRound)) {
-    animationRound++;
+    animationRound = nextRoundWithTransfers(animationRound);
     tryRequestRoundChange(animationRound);
     makeNewPie(animationRound);
     if (animationRound < jsonData.results.length) {
@@ -695,10 +716,24 @@ function goToNextRound():void {
     actionQueue.push({ type: 'round', round: currentRound });
     return;
   }
-  if (previousRound == currentRound-1 && previousRound > 0)
+  if (previousRound == currentRound-1 && previousRound > 0) {
+    // If the source round has no transfers, skip ahead to the first that does,
+    // draw that round, and animate from there.
+    if (!roundHasTransfers(previousRound)) {
+      const target = nextRoundWithTransfers(previousRound);
+      previousRound = target;
+      currentRound = target + 1;
+      animateOneRoundFn();
+      // Notify controller after animation has started, so the reactive
+      // echo doesn't interfere. isAnimating is now true, so goToNextRound
+      // will queue rather than act on the echo.
+      tryRequestRoundChange(currentRound);
+      return;
+    }
     animateOneRoundFn();
-  else
+  } else {
     setRoundFn(currentRound);
+  }
   previousRound = currentRound;
 }
 
@@ -736,6 +771,7 @@ function animateOneRoundFn() {
     isAnimating = false;
     return;
   }
+
   isAnimating = true;
   if (displayPhase === 0) {
     animatePhase1(animationRound-1, () => {
