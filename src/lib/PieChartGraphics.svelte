@@ -606,7 +606,11 @@ function doAnimateOneRound(targetRound: number) {
     displayPhase = 1;
     animatePhase2(animationRound-1, () => {
       displayPhase = 2;
-      animatePhase3(animationRound, () => { displayPhase = 0; stopAnimating(); });
+      animatePhase3(animationRound, () => {
+        displayPhase = 0;
+        tryRequestRoundChange(animationRound);
+        stopAnimating();
+      });
     });
   });
 }
@@ -664,12 +668,15 @@ function goToNextRound():void {
     actionQueue.push({ type: 'round', round: currentRound });
     return;
   }
-  if (previousRound == currentRound-1 && previousRound > 0)
-    animateOneRoundFn();
-  else {
+  if (previousRound == currentRound-1 && previousRound > 0) {
+    const target = currentRound;
+    // Revert currentRound — it should only advance after animation completes
+    tryRequestRoundChange(previousRound);
+    doAnimateOneRound(target);
+  } else {
     setRoundFn(currentRound);
+    previousRound = currentRound;
   }
-  previousRound = currentRound;
 }
 
 
