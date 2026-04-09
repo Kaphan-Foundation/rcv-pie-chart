@@ -25,6 +25,7 @@ let {
   mouseX = $bindable(),
   mouseY = $bindable(),
   requestRoundChange = ((r:number) => {}),
+  requestSkipToRound = ((r:number) => {}),
   candidateColors = [],
   excludeFinalWinnerAndEliminatedCandidate = false,
   firstRoundDeterminesPercentages = false,
@@ -38,6 +39,7 @@ let {
   mouseX: number,
   mouseY: number,
   requestRoundChange: ((r:number)=>void) | null,
+  requestSkipToRound: ((r:number)=>void) | null,
   candidateColors: string[],
   excludeFinalWinnerAndEliminatedCandidate: boolean,
   firstRoundDeterminesPercentages: boolean,
@@ -146,6 +148,22 @@ function tryRequestRoundChange(newRound:number):void {
     previousRound = newRound; // if we get a reactive "echo" we will ignore it!
     requestRoundChange(newRound);
   }
+}
+
+function roundHasTransfers(round: number): boolean {
+  if (!jsonData?.results || round < 1 || round > jsonData.results.length) return false;
+  const tallyResults = jsonData.results[round - 1].tallyResults;
+  return tallyResults.length > 0 &&
+    tallyResults.some((tr: RCtabTallyResults) => Object.keys(tr.transfers).length > 0);
+}
+
+// Find the next round with transfers, starting from the given round.
+// Returns the last round if none have transfers.
+function nextRoundWithTransfers(fromRound: number): number {
+  for (let r = fromRound; r < jsonData.results.length; r++) {
+    if (roundHasTransfers(r)) return r;
+  }
+  return jsonData.results.length;
 }
 
 function makeNewPie(round: number) {
@@ -664,9 +682,23 @@ function goToNextRound():void {
     actionQueue.push({ type: 'round', round: currentRound });
     return;
   }
-  if (previousRound == currentRound-1 && previousRound > 0)
-    animateOneRoundFn();
-  else {
+  if (previousRound == currentRound-1 && previousRound > 0) {
+    if (roundHasTransfers(previousRound)) {
+      animateOneRoundFn();
+    } else {
+      // No transfers — skip to the next round that has them
+      const target = nextRoundWithTransfers(currentRound);
+      if (requestSkipToRound) {
+        previousRound = target;
+        if (target < jsonData.results.length) {
+          requestSkipToRound(target + 1);
+        } else {
+          requestSkipToRound(target);
+        }
+        return;
+      }
+    }
+  } else {
     setRoundFn(currentRound);
   }
   previousRound = currentRound;

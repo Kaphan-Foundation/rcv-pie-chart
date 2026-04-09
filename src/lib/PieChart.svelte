@@ -13,6 +13,7 @@ const tooltipOpacity = 0.85;   // for when we display explanatory text at the mo
 let { electionSummary,
       currentRound = 1,
       requestRoundChange = ((r:number) => {}),
+      requestSkipToRound = ((r:number) => {}),
       candidateColors = [],
       textForWinner = 'elected',
       excludeFinalWinnerAndEliminatedCandidate = false,
@@ -23,6 +24,7 @@ let { electionSummary,
       electionSummary : RCtabSummary|string,
       currentRound:number,
       requestRoundChange:(r:number) => void,
+      requestSkipToRound:(r:number) => void,
       candidateColors: string[],
       textForWinner: string,
       excludeFinalWinnerAndEliminatedCandidate: boolean,
@@ -466,6 +468,7 @@ h3, h4 {
             bind:mouseX={mouseX}
             bind:mouseY={mouseY}
             requestRoundChange={onRoundChange}
+            requestSkipToRound={requestSkipToRound}
             candidateColors={candidateColors}
             excludeFinalWinnerAndEliminatedCandidate={excludeFinalWinnerAndEliminatedCandidate}
             firstRoundDeterminesPercentages={firstRoundDeterminesPercentages}
