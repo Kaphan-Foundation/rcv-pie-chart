@@ -292,15 +292,6 @@ function getPhaseLabels(round: number): string[] {
   return [firstLabel, 'Transfer', 'Consolidate'];
 }
 
-// The stepper is disabled when there are no transfers to animate.
-// Also disabled on the last round — nothing to advance to.
-function isStepperDisabled(round: number): boolean {
-  if (!jsonData?.results || round < 1 || round > jsonData.results.length) return true;
-  if (round === jsonData.results.length) return true;
-  const tallyResults = jsonData.results[round - 1].tallyResults;
-  return tallyResults.length === 0 ||
-    tallyResults.every((tr: RCtabTallyResults) => Object.keys(tr.transfers).length === 0);
-}
 
 function isFinalRoundSuppressed(round: number): boolean {
   return excludeFinalWinnerAndEliminatedCandidate
@@ -457,7 +448,7 @@ h3, h4 {
   <PhaseStepper
     labels={getPhaseLabels(currentRound)}
     currentStep={displayPhase}
-    disabled={isStepperDisabled(currentRound)}
+    disabled={false}
     onAdvance={animateOnePhase}
   />
 </div>
