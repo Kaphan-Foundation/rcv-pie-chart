@@ -105,6 +105,7 @@ The JSON structure looks like:
 | `electionSummary` | `RCtabSummary \| string` | (required) | Election results data |
 | `currentRound` | `number` | `1` | Round to display |
 | `requestRoundChange` | `(round: number) => void` | no-op | Callback when the component requests a round change (e.g. during animation) |
+| `requestSkipToRound` | `(round: number) => void` | no-op | Callback when the component wants to skip no-transfer rounds during animation. The host should advance to the requested round without stopping playback. |
 | `candidateColors` | `string[]` | `[]` (uses d3.schemeCategory10) | Custom color palette for candidates |
 | `textForWinner` | `string` | `'elected'` | Word used in captions for winners (e.g. `'elected'`, `'winner'`, `'approved'`) |
 | `showCaptions` | `boolean` | `false` | Show narration text below the chart describing eliminations and elections per round |
