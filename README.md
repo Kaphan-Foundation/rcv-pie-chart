@@ -109,9 +109,28 @@ The JSON structure looks like:
 | `candidateColors` | `string[]` | `[]` (uses d3.schemeCategory10) | Custom color palette for candidates |
 | `textForWinner` | `string` | `'elected'` | Word used in captions for winners (e.g. `'elected'`, `'winner'`, `'approved'`) |
 | `showCaptions` | `boolean` | `false` | Show narration text below the chart describing eliminations and elections per round |
+| `showVotes` | `boolean` | `true` | Show the raw vote count on each slice label. |
+| `showPercent` | `boolean` | `true` | Show the percentage on each slice label. |
 | `firstRoundDeterminesPercentages` | `boolean` | `true` | When true, percentages use first-round active votes as the denominator (so the total stays at 100% even as votes are exhausted). When false, the denominator is the current round's active votes, which decrease as candidates are eliminated. |
 | `excludeFinalWinnerAndEliminatedCandidate` | `boolean` | `false` | When true, removes the final winner and last eliminated candidate from the display |
 | `randomizeOrder` | `boolean` | `false` | When true, randomizes the display order of candidates. This distributes pie slice sizes more evenly, allowing more labels to be shown (labels that would overlap are hidden). |
+
+### Slice labels: votes vs. percent
+
+`showVotes` and `showPercent` independently control the two parts of each
+slice's value label:
+
+| `showVotes` | `showPercent` | Label reads |
+|-------------|---------------|-------------|
+| `true` | `true` | `123 (45%)` — the default, votes with the percent in parentheses |
+| `true` | `false` | `123` — votes only |
+| `false` | `true` | `45%` — percent only |
+| `false` | `false` | (no value shown — candidate name only) |
+
+When `showPercent` is on, `firstRoundDeterminesPercentages` chooses the
+denominator (see above). Setting exactly one of the two flags is the way to
+show a single clean number per slice; leaving both on (the default) preserves
+the original votes-and-percent label.
 
 ### Animation controls
 

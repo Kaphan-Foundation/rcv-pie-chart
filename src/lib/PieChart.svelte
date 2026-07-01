@@ -15,9 +15,13 @@ let { electionSummary,
       requestRoundChange = ((r:number) => {}),
       requestSkipToRound = ((r:number) => {}),
       candidateColors = [],
-      textForWinner = 'elected',
+      textForWinner = 'won',
       excludeFinalWinnerAndEliminatedCandidate = false,
       firstRoundDeterminesPercentages = false,
+      // Slice-label content. Default true/true = "votes (percent)", the
+      // existing standalone/RCVis behavior. The app narrows to one number.
+      showVotes = true,
+      showPercent = true,
       randomizeOrder = false,
       showCaptions = false,
     } : {
@@ -29,6 +33,8 @@ let { electionSummary,
       textForWinner: string,
       excludeFinalWinnerAndEliminatedCandidate: boolean,
       firstRoundDeterminesPercentages: boolean,
+      showVotes?: boolean,
+      showPercent?: boolean,
       randomizeOrder: boolean,
       showCaptions: boolean,
 
@@ -42,7 +48,7 @@ const winnerTextForms: Record<string, { caption: string, event: string, infiniti
   'advanced': { caption: 'Advanced', event: 'advanced to the general',   infinitive: 'to advance to the general' },
   'leading':  { caption: 'Leading',  event: 'is in the lead',           infinitive: 'to take the lead' },
 };
-let winnerText = $derived(winnerTextForms[textForWinner] ?? winnerTextForms['elected']);
+let winnerText = $derived(winnerTextForms[textForWinner] ?? winnerTextForms['won']);
 
 
 let popup = $state<HTMLElement | null>(null);
@@ -472,6 +478,8 @@ h3, h4 {
             candidateColors={candidateColors}
             excludeFinalWinnerAndEliminatedCandidate={excludeFinalWinnerAndEliminatedCandidate}
             firstRoundDeterminesPercentages={firstRoundDeterminesPercentages}
+            showVotes={showVotes}
+            showPercent={showPercent}
             randomizeOrder={randomizeOrder}
             bind:displayPhase={displayPhase}
           />

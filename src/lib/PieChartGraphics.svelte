@@ -6,7 +6,7 @@
 import * as d3 from 'd3';
 import { type DefaultArcObject } from 'd3-shape';
 
-import { onMount } from 'svelte';
+import { onMount, untrack } from 'svelte';
 
 import type { RCtabSummary,
               RCtabSummaryConfig,
@@ -29,6 +29,10 @@ let {
   candidateColors = [],
   excludeFinalWinnerAndEliminatedCandidate = false,
   firstRoundDeterminesPercentages = false,
+  // Slice-label content. Defaults show votes AND percent (the standalone /
+  // RCVis behavior, unchanged). The app passes a single-number subset.
+  showVotes = true,
+  showPercent = true,
   randomizeOrder = false,
   displayPhase = $bindable(0),
 } : {
@@ -43,6 +47,8 @@ let {
   candidateColors: string[],
   excludeFinalWinnerAndEliminatedCandidate: boolean,
   firstRoundDeterminesPercentages: boolean,
+  showVotes?: boolean,
+  showPercent?: boolean,
   randomizeOrder: boolean,
   displayPhase: number,
 } = $props();
@@ -112,6 +118,12 @@ function hatchPatternId(name: string): string {
 let pieInfoGlobal:PieInfoArray = [];
 let donutInfoGlobal:PieInfoArray = [];
 let pieDataGlobal:PieDataArray = [];
+
+// Last args passed to displayTextLabels, captured so we can redraw ONLY the
+// text layer (not regenerate the pie) when the percentage basis changes —
+// the slice geometry is vote-based and unchanged; only the labels differ.
+let lastLabelArgs: { round: number; pieInfo: PieInfoArray; x: number; y: number;
+                     outerRadius: number; eliminated: string[] } | null = null;
 
 let originalTotalVotes:number = 0;
 
@@ -192,7 +204,10 @@ onMount(() => {
 
 function initSummaryData(round: number):PieDataArray {
   const pieData:PieDataArray = prepareRoundData(round);
-  originalTotalVotes = getTotalVotes(round);
+  // "firstRoundDeterminesPercentages" means the denominator is the FIRST
+  // round's total, fixed for every round — not the current round's total
+  // (which shrinks as ballots exhaust). Always compute from round 1.
+  originalTotalVotes = getTotalVotes(1);
   return pieData;
 }
 
@@ -253,6 +268,26 @@ function candidatePercentage(candidate:string, round:number):string {
     minimumFractionDigits: 1
   });
   return formattedNumber;
+}
+
+// Second line of a slice label, honoring showVotes / showPercent and the
+// percentage basis. The inactive/exhausted slice has no meaningful "% of
+// live" (it's outside the live pool), so in live-percent mode it falls back
+// to its vote count — matching how the results table treats inactive ballots.
+// Used by BOTH the measuring pass (computeVisibleLabels) and the render pass
+// (displayTextLabels) so label sizing and content stay in sync.
+//
+// Defaults (showVotes && showPercent) produce "votes (percent)" — the
+// standalone / RCVis behavior, unchanged.
+function secondLineText(label: string, round: number): string {
+  const votes = candidateVotesStr(label, round);
+  // Inactive with a live-vote denominator has no valid percent → show votes.
+  const inactiveNoLivePercent = isExhaustedLabel(label) && !firstRoundDeterminesPercentages;
+  const percentAllowed = showPercent && !inactiveNoLivePercent;
+
+  if (showVotes && percentAllowed) return votes + ' (' + candidatePercentage(label, round) + ')';
+  if (percentAllowed) return candidatePercentage(label, round);
+  return votes;  // votes-only, or inactive-in-live-percent fallback
 }
 
 function getTotalVotes(round:number) {
@@ -667,6 +702,37 @@ function runAnimationCycle() {
 
 $effect(() =>{
     goToNextRound();
+});
+
+// Redraw only the text layer, recomputing percentages under the current
+// basis. The pie/donut geometry is untouched. Replays displayTextLabels —
+// the same path a round change uses (moveTextLabels ends by calling it) —
+// so label overlap/visibility is recomputed consistently (important because
+// the inactive label's width changes noticeably between the two bases).
+function refreshTextLabels(): void {
+  if (!lastLabelArgs) return;
+  d3.select<SVGSVGElement | null, any>(svg).select('#' + textLayerID).remove();
+  const a = lastLabelArgs;
+  displayTextLabels(a.round, a.pieInfo, a.x, a.y, a.outerRadius, a.eliminated);
+}
+
+// When the percentage basis (firstRoundDeterminesPercentages) changes, the
+// slice sizes don't change — only the labels — so just redraw the text.
+// Tracks ONLY the basis prop (currentRound has its own effect); skips the
+// initial run (onMount already draws); skips mid-animation (labels self-heal
+// on the next round draw). Standalone/RCVis sets the basis once and never
+// changes it, so this effect never fires for them — no behavior change.
+let basisEffectInitialized = false;
+$effect(() => {
+  // Track the label-content props (basis + which numbers to show). currentRound
+  // has its own effect, so we don't track it here.
+  firstRoundDeterminesPercentages; showVotes; showPercent;
+  if (!basisEffectInitialized) {
+    basisEffectInitialized = true;
+    return;
+  }
+  if (isAnimating) return;
+  untrack(() => refreshTextLabels());
 });
 
 
@@ -1097,13 +1163,7 @@ function computeVisibleLabels(round: number, pieInfo: PieInfoArray,
     const displayName = d.data.label === 'exhausted' ? exhaustedLabel : d.data.label;
     const centroid = textArc.centroid(d as any);
     const anchor = textLabelPosition(d.startAngle, d.endAngle);
-    const votes = candidateVotesStr(d.data.label, round);
-    let secondLine: string;
-    if (!firstRoundDeterminesPercentages && isExhaustedLabel(d.data.label)) {
-      secondLine = votes;
-    } else {
-      secondLine = votes + ' (' + candidatePercentage(d.data.label, round) + ')';
-    }
+    const secondLine = secondLineText(d.data.label, round);
 
     const textEl = tempGroup.append('text')
       .attr('transform', `translate(${centroid})`)
@@ -1148,6 +1208,10 @@ function computeVisibleLabels(round: number, pieInfo: PieInfoArray,
 function displayTextLabels(round: number, pieInfo:PieInfoArray,
                             x:number, y:number, outerRadius:number, eliminatedCandidates:string[]) {
 
+  // Remember the render context so refreshTextLabels() can replay just the
+  // labels (with recomputed percentages) when the basis toggles.
+  lastLabelArgs = { round, pieInfo, x, y, outerRadius, eliminated: eliminatedCandidates };
+
   const g = d3.select<SVGSVGElement | null, any>(svg);
 
   const textLayer = g.append('g')
@@ -1186,15 +1250,7 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
             .append('tspan')
               .attr('x', 0)
               .attr('dy', '1.2em')
-              .text(d => {
-                const votes = candidateVotesStr(d.data.label, round);
-                // When using per-round percentages, exhausted votes would push
-                // the total over 100%, so show only the vote count.
-                if (!firstRoundDeterminesPercentages && isExhaustedLabel(d.data.label)) {
-                  return votes;
-                }
-                return votes + ' (' + candidatePercentage(d.data.label, round) + ')';
-              });
+              .text(d => secondLineText(d.data.label, round));
       }
     });
   }

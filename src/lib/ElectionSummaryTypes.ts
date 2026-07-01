@@ -73,12 +73,18 @@ export interface RCtabSummarySummary  {
  * @param data The RCtabSummary object to validate
  * @returns A validation result containing status and error messages if any
  */
-export function validateRCtabSummary(data: any): { valid: boolean; errors: string[] } {
+export function validateRCtabSummary(data: any): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
+  // Warnings are non-fatal data-consistency observations (e.g. Sankey
+  // balance drift from floating-point rounding). Callers should log
+  // them but not block rendering on them — the chart is still
+  // informative even when the underlying numbers drift by a small
+  // amount across rounds.
+  const warnings: string[] = [];
 
   // Check if the data is an object
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return { valid: false, errors: ['Input is not a valid object'] };
+    return { valid: false, errors: ['Input is not a valid object'], warnings };
   }
 
   // Define allowed fields for each type
@@ -123,18 +129,18 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
   // 3. Check if results exist and is an array
   if (!data.results) {
     errors.push('Results are missing');
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
   }
   
   if (!Array.isArray(data.results)) {
     errors.push('Results must be an array');
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
   }
 
   // Early return if no results to validate
   if (data.results.length === 0) {
     errors.push('Results array is empty');
-    return { valid: errors.length === 0, errors };
+    return { valid: errors.length === 0, errors, warnings };
   }
 
   // Track all candidate names seen in the first round
@@ -291,6 +297,59 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
     }
   }
 
+  // 3b. Per-candidate conservation check across round transitions.
+  //     For each candidate C in round R, the Sankey-balance constraint is:
+  //         prev_tally[C] + incoming[C] = next_tally[C] + outgoing[C]
+  //     where:
+  //       outgoing[C] = sum of C's transfers when C is a source (eliminated
+  //                     or elected with surplus) in round R
+  //       incoming[C] = sum of transfers directed at C from any source in
+  //                     round R's tallyResults
+  //     If C is eliminated in R, C is absent from R+1's tally (next_tally=0).
+  //     Destinations "exhausted" and "residual surplus" count as outflow only.
+  const TOLERANCE = 0.01;
+  for (let i = 0; i < data.results.length - 1; i++) {
+    const round = data.results[i];
+    const nextRound = data.results[i + 1];
+    if (!round?.tally || !nextRound?.tally || !Array.isArray(round.tallyResults)) continue;
+
+    const outgoing: Record<string, number> = {};
+    const incoming: Record<string, number> = {};
+    for (const tr of round.tallyResults) {
+      const source = tr.elected || tr.eliminated;
+      if (!source || !tr.transfers) continue;
+      let total = 0;
+      for (const [dest, amountStr] of Object.entries(tr.transfers)) {
+        const amount = parseFloat(amountStr as string || '0');
+        if (isNaN(amount)) continue;
+        total += amount;
+        if (dest !== 'exhausted' && dest !== 'residual surplus') {
+          incoming[dest] = (incoming[dest] || 0) + amount;
+        }
+      }
+      outgoing[source] = (outgoing[source] || 0) + total;
+    }
+
+    for (const name of Object.keys(round.tally)) {
+      const prev = parseFloat(round.tally[name] || '0');
+      const next = parseFloat(nextRound.tally[name] || '0');
+      const out = outgoing[name] || 0;
+      const inc = incoming[name] || 0;
+      const delta = (prev + inc) - (next + out);
+      if (Math.abs(delta) > TOLERANCE) {
+        // Non-fatal: drift from floating-point rounding across many
+        // rounds with 4-decimal-place vote arithmetic. Surface as a
+        // warning so the chart still renders; the user sees a tiny
+        // amount of imbalance, not a failure.
+        warnings.push(
+          `Round ${round.round}→${nextRound.round}: "${name}" unbalanced — ` +
+          `prev=${prev} + in=${inc.toFixed(4)} ≠ next=${next} + out=${out.toFixed(4)} ` +
+          `(delta=${delta.toFixed(4)})`,
+        );
+      }
+    }
+  }
+
   // 4. Check summary structure
   if (!data.summary) {
     errors.push('Summary is missing');
@@ -304,8 +363,12 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
       }
     }
 
-    // Check for required fields
-    const requiredSummaryFields = ['finalThreshold', 'numCandidates', 'numWinners', 'totalNumBallots'];
+    // Check for required fields. finalThreshold is intentionally NOT required:
+    // plain bottoms-up has no winning threshold (the winner set is whoever
+    // survives the last elimination round — the "threshold" is only known
+    // after the fact), and per-round `threshold` is already optional for the
+    // same reason.
+    const requiredSummaryFields = ['numCandidates', 'numWinners', 'totalNumBallots'];
     for (const field of requiredSummaryFields) {
       if (data.summary[field] === undefined) {
         errors.push(`Summary is missing required field: "${field}"`);
@@ -315,6 +378,7 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
+    warnings,
   };
 }
