@@ -862,10 +862,35 @@ export function animateOnePhaseFn():void {
 }
 
 function updatePie(round:number):void {
-  pieDataGlobal = prepareTransitionData(round);
-  pieInfoGlobal = updatePieChart(round, pieChartID, pieDataGlobal, 0, smallPieRadius(), true);
+  const newData = prepareTransitionData(round);
+
+  // Carry the surplus-transfer sub-slices from the phase-1 split forward as
+  // ZERO-VALUE entries, inserted before their parent slice exactly where
+  // splitElectedSurplus put them. prepareTransitionData only knows one entry
+  // per candidate, so without these the keyed join EXITS the hatched sliver
+  // and exit().remove() deletes it at full visual size — a white gap in the
+  // pie that the neighbors then tween closed over. With a zero-value entry
+  // present, the sliver is an UPDATE node instead and the normal angular
+  // tween closes it smoothly, just like an eliminated candidate's slice.
+  const transferLabels = new Set(
+    pieDataGlobal.filter(d => d.isTransfer).map(d => d.label));
+  const drawData:PieDataArray = [];
+  for (const entry of newData) {
+    if (transferLabels.has(entry.label)) {
+      drawData.push({ label: entry.label, value: 0, isTransfer: true });
+    }
+    drawData.push(entry);
+  }
+
+  // pieDataGlobal keeps only the per-candidate entries: the next round's
+  // splitElectedSurplus re-derives transfer entries itself, and a stale
+  // zero-value transfer would duplicate its key. The closed sliver's <g>
+  // stays in the DOM at zero width; it is either reused by the next split
+  // (same candidate transferring again) or exits invisibly.
+  pieDataGlobal = newData;
+  pieInfoGlobal = updatePieChart(round, pieChartID, drawData, 0, smallPieRadius(), true);
   // Update shadow outline pie in sync — exit() in applyDataJoin handles cleanup
-  updatePieChart(round, pieOutlineID, pieDataGlobal, 0, smallPieRadius(), false, true);
+  updatePieChart(round, pieOutlineID, drawData, 0, smallPieRadius(), false, true);
 }
 
 
@@ -1259,7 +1284,7 @@ function displayTextLabels(round: number, pieInfo:PieInfoArray,
 
 function moveTextLabels(round: number, pieInfo:PieInfoArray, outerRadius:number, eliminatedCandidates:string[]) {
   const g = d3.select<SVGSVGElement | null, any>(svg);
-  const textLayer = g.select('#' + textLayerID);
+  const textLayer = g.select<SVGGElement>('#' + textLayerID);
 
   // Compute which labels will be visible at the destination
   const destVisible = computeVisibleLabels(round, pieInfo, outerRadius, textLayer);

@@ -19,7 +19,11 @@ export interface RCtabSummary {
   config : RCtabSummaryConfig,
   jsonFormatVersion : string,
   results : RCtabResults[],
-  summary : RCtabSummarySummary
+  summary : RCtabSummarySummary,
+  /** Our additive extension (the tieBreaks precedent): election statistics
+   *  computed at tabulation (docs/election-statistics-design.md). Absent
+   *  from real RCTab files, which still validate. */
+  statistics ?: import('./election-statistics').ElectionStatistics,
 }
 
 export interface RCtabSummaryConfig {
@@ -36,7 +40,27 @@ export interface RCtabResults {
   round : number,
   tally : RCtabTally,
   tallyResults : RCtabTallyResults[],
-  threshold ?: string
+  threshold ?: string,
+  // Our extension (absent from real RCTab files, which log tie decisions
+  // only to their audit log): records each time the tiebreak logic actually
+  // decided between equal-vote candidates this round. Nobody external
+  // consumes our summaries (RCVis retired), so additive fields are safe.
+  tieBreaks ?: RCtabTieBreak[]
+}
+
+export interface RCtabTieBreak {
+  // 'elimination': tied for fewest votes, `selected` was eliminated.
+  // 'election': tied at/over threshold in single-election-per-round mode,
+  //             `selected` was elected first.
+  // 'electionOrder': remaining candidates all won but were tied when
+  //                  deciding the order of their election rounds.
+  kind : 'elimination' | 'election' | 'electionOrder',
+  tiedCandidates : string[],   // everyone in the tie, including `selected`
+  selected : string,
+  votes : string,              // the tied total (formatted like tally values)
+  method : string,             // how it was broken, e.g. "candidate order",
+                               // "Borda count (A: 1.62, B: 0.38)",
+                               // "random draw (seed 42)"
 }
 
 export interface RCtabInactiveBallots {
@@ -88,9 +112,10 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
   }
 
   // Define allowed fields for each type
-  const allowedRCtabSummaryFields = new Set(['config', 'jsonFormatVersion', 'results', 'summary']);
+  const allowedRCtabSummaryFields = new Set(['config', 'jsonFormatVersion', 'results', 'summary', 'statistics']);
   const allowedConfigFields = new Set(['contest', 'date', 'generatedBy', 'jurisdiction', 'office', 'threshold']);
-  const allowedResultsFields = new Set(['inactiveBallots', 'round', 'tally', 'tallyResults', 'threshold']);
+  const allowedResultsFields = new Set(['inactiveBallots', 'round', 'tally', 'tallyResults', 'threshold', 'tieBreaks']);
+  const allowedTieBreakFields = new Set(['kind', 'tiedCandidates', 'selected', 'votes', 'method']);
   const allowedInactiveBallotsFields = new Set(['exhaustedChoices', 'overvotes', 'repeatedRankings', 'skippedRankings', 'finalRoundSurplus']);
   const allowedTallyResultsFields = new Set(['elected', 'eliminated', 'transfers']);
   const allowedSummaryFields = new Set(['finalThreshold', 'numCandidates', 'numWinners', 'totalNumBallots', 'undervotes']);
@@ -129,6 +154,17 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
   // 3. Check if results exist and is an array
   if (!data.results) {
     errors.push('Results are missing');
+    // statistics: our additive extension — light structural check only
+    // (absent from real RCTab files; internal producer is trusted).
+    const stats = (data as Record<string, unknown>).statistics;
+    if (stats !== undefined) {
+      if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+        errors.push('statistics must be an object when present');
+      } else if ((stats as Record<string, unknown>).version !== 1) {
+        warnings.push('statistics.version is not 1 — viewer may not understand it');
+      }
+    }
+
     return { valid: errors.length === 0, errors, warnings };
   }
   
@@ -213,6 +249,29 @@ export function validateRCtabSummary(data: any): { valid: boolean; errors: strin
     }
 
     // Threshold is optional (absent in bottoms-up elections)
+
+    // tieBreaks is optional (our extension; absent from real RCTab files)
+    if (round.tieBreaks !== undefined) {
+      if (!Array.isArray(round.tieBreaks)) {
+        errors.push(`Round ${previousRound}: tieBreaks must be an array`);
+      } else {
+        for (let j = 0; j < round.tieBreaks.length; j++) {
+          const tb = round.tieBreaks[j];
+          if (!tb || typeof tb !== 'object' || Array.isArray(tb)) {
+            errors.push(`Round ${previousRound}, tieBreak ${j+1}: must be an object`);
+            continue;
+          }
+          for (const field of Object.keys(tb)) {
+            if (!allowedTieBreakFields.has(field)) {
+              errors.push(`Round ${previousRound}, tieBreak ${j+1}: Unexpected field: "${field}"`);
+            }
+          }
+          if (!tb.selected || !Array.isArray(tb.tiedCandidates) || tb.tiedCandidates.length < 2) {
+            errors.push(`Round ${previousRound}, tieBreak ${j+1}: needs a selected candidate and at least two tiedCandidates`);
+          }
+        }
+      }
+    }
 
     // Check if tallyResults exists and is an array
     if (!round.tallyResults) {
